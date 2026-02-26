@@ -3,30 +3,29 @@
  * This script fetches all media items, checks their production years, and if a premiere date is missing, it can be set based on the production year.
  */
 
-import { Api } from '@jellyfin/sdk';
 import { BaseItemDto } from '@jellyfin/sdk/lib/generated-client';
 import { getItemsApi } from '@jellyfin/sdk/lib/utils/api/items-api';
 import { getUserApi } from '@jellyfin/sdk/lib/utils/api/user-api';
-import confirm from 'components/confirm/confirm';
 import { ServerConnections } from 'lib/jellyfin-apiclient';
+import type { ScriptContext } from '../types/ScriptContext';
 
 export default {
     name: 'Convert Production Year to Premiere Date',
     description: 'Convert production years to premiere dates for media items without premiere dates',
-    execute: async (api: Api, log: (message: string) => void) => {
+    execute: async (context: ScriptContext) => {
         try {
-            const userApi = getUserApi(api);
+            const userApi = getUserApi(context.api);
             const { data: users } = await userApi.getUsers();
             const currentUser = users[0];
 
             if (!currentUser?.Id) {
-                log('E: Could not get user information');
+                context.log('E: Could not get user information');
                 return;
             }
 
-            log('I: Fetching all media items...');
+            context.log('I: Fetching all media items...');
 
-            const itemsApi = getItemsApi(api);
+            const itemsApi = getItemsApi(context.api);
 
             const { data: items } = await itemsApi.getItems({
                 userId: currentUser.Id,
@@ -37,7 +36,7 @@ export default {
             });
 
             if (!items.Items || items.Items.length === 0) {
-                log('W: No media items found in your library.');
+                context.log('W: No media items found in your library.');
                 return;
             }
 
@@ -53,7 +52,7 @@ export default {
                     });
                     if (boxSetItems.data.Items) {
                         items.Items.push(...boxSetItems.data.Items);
-                        log(`I: Added ${boxSetItems.data.Items.length} items from boxset "${item.Name}"`);
+                        context.log(`I: Added ${boxSetItems.data.Items.length} items from boxset "${item.Name}"`);
                     }
                 }
             }
@@ -67,7 +66,7 @@ export default {
             items.Items.forEach((item) => {
                 const year = item.ProductionYear;
                 if (!year) {
-                    log(`W: Item ${item.Name} have no year`);
+                    context.log(`W: Item ${item.Name} have no year`);
                     return;
                 }
                 if (item.PremiereDate) {
@@ -77,7 +76,7 @@ export default {
                 // Validate year is in format YYYYMMDD
                 const yearStr = year.toString();
                 if (!/^\d{8}$/.test(yearStr)) {
-                    log(`W: Item "${item.Name}" has an invalid production year: ${year}`);
+                    context.log(`W: Item "${item.Name}" has an invalid production year: ${year}`);
                     return;
                 }
 
@@ -87,55 +86,53 @@ export default {
                 const dayPart = parseInt(yearStr.substring(6, 8), 10);
 
                 if (isNaN(yearPart) || isNaN(monthPart) || isNaN(dayPart)) {
-                    log(`W: Item "${item.Name}" has an invalid production year: ${year}`);
+                    context.log(`W: Item "${item.Name}" has an invalid production year: ${year}`);
                     return;
                 }
 
                 // Validate month and day are within valid ranges
                 if (monthPart < 1 || monthPart > 12) {
-                    log(`W: Item "${item.Name}" has an invalid month in production year: ${monthPart}`);
+                    context.log(`W: Item "${item.Name}" has an invalid month in production year: ${monthPart}`);
                     return;
                 }
 
                 if (dayPart < 1 || dayPart > 31) {
-                    log(`W: Item "${item.Name}" has an invalid day in production year: ${dayPart}`);
+                    context.log(`W: Item "${item.Name}" has an invalid day in production year: ${dayPart}`);
                     return;
                 }
 
                 itemsWithYearNoPremiere.push(item);
             });
 
-            log(`All items: ${items.Items.length}`);
-            log(`Items with production year but no premiere date: ${itemsWithYearNoPremiere.length}`);
+            context.log(`All items: ${items.Items.length}`);
+            context.log(`Items with production year but no premiere date: ${itemsWithYearNoPremiere.length}`);
 
             if (itemsWithYearNoPremiere.length === 0) {
-                log('No items need premiere date updates.');
+                context.log('No items need premiere date updates.');
                 return;
             }
 
-            try {
-                await confirm({
-                    title: 'Update Premiere Dates',
-                    text: `This will update premiere dates for ${itemsWithYearNoPremiere.length} items based on their production year. Do you want to continue?`,
-                    confirmText: 'Yes, Update',
-                    cancelText: 'No, Cancel'
-                });
+            // Use context.confirm for user confirmation
+            const shouldContinue = await context.confirm(
+                `This will update premiere dates for ${itemsWithYearNoPremiere.length} items based on their production year. Continue?`
+            );
 
-                log('I: User confirmed. Starting updates...');
-            } catch {
-                log('W: User cancelled the operation');
+            if (!shouldContinue) {
+                context.skip('User cancelled the operation');
                 return;
             }
+
+            context.log('I: User confirmed. Starting updates...');
 
             try {
                 const apiClient = ServerConnections.currentApiClient();
                 if (!apiClient) {
-                    log('E: Can\'t get api client');
+                    context.log('E: Can\'t get api client');
                     return;
                 }
 
                 for (const item of itemsWithYearNoPremiere) {
-                    log(`I: Processing: ${item.Name}`);
+                    context.log(`I: Processing: ${item.Name}`);
                     let fullItem;
 
                     try {
@@ -144,12 +141,12 @@ export default {
                             item.Id!
                         );
                     } catch {
-                        log('W: Can\'t get the full item');
+                        context.log('W: Can\'t get the full item');
                         continue;
                     }
 
                     if (fullItem.PremiereDate) {
-                        log('W: Item already has premire date');
+                        context.log('W: Item already has premire date');
                         continue;
                     }
 
@@ -167,18 +164,18 @@ export default {
                     try {
                         await apiClient.updateItem(fullItem);
                     } catch {
-                        log('W: Can\'t update item');
+                        context.log('W: Can\'t update item');
                         continue;
                     }
 
-                    log(`S: Updated item with premiere date ${newPremiereDate}`);
+                    context.log(`S: Updated item with premiere date ${newPremiereDate}`);
                 }
             } catch (error) {
-                log('E: Error updating items: ' + (error instanceof Error ? error.message : String(error)));
+                context.log('E: Error updating items: ' + (error instanceof Error ? error.message : String(error)));
                 throw error;
             }
         } catch (error) {
-            log('E: ' + (error instanceof Error ? error.message : String(error)));
+            context.log('E: ' + (error instanceof Error ? error.message : String(error)));
             throw error;
         }
     }
