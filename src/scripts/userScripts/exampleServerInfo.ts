@@ -10,6 +10,7 @@ import type { Api } from '@jellyfin/sdk';
 export default {
     name: 'Server Information',
     description: 'Display information about the Jellyfin server',
+    isExample: true,
     execute: async (api: Api, log: (message: string) => void) => {
         try {
             log('I: Fetching server information...');

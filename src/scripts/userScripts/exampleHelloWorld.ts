@@ -7,6 +7,7 @@
 export default {
     name: 'Hello World',
     description: 'A simple example script that greets the user',
+    isExample: true,
     execute: async (api: any, log: (message: string) => void) => {
         log('I: Hello from the Jellyfin Scripts system!');
         log('I: This is a basic example script.');

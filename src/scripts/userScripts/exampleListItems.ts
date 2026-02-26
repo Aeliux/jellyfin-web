@@ -12,6 +12,7 @@ import type { Api } from '@jellyfin/sdk';
 export default {
     name: 'List Recent Items',
     description: 'Fetch and display recently added items from your library',
+    isExample: true,
     execute: async (api: Api, log: (message: string) => void) => {
         try {
             log('I: Fetching current user information...');

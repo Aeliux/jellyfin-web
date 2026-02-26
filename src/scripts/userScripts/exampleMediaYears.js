@@ -11,6 +11,7 @@ import { getUserApi } from '@jellyfin/sdk/lib/utils/api/user-api';
 export default {
     name: 'List Media Years (JS)',
     description: 'List all media items and their production years (JavaScript example)',
+    isExample: true,
     execute: async (api, log) => {
         try {
             log('I: Fetching current user information...');
