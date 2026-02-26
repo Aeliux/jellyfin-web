@@ -1,6 +1,7 @@
 import AccountCircle from '@mui/icons-material/AccountCircle';
 import AppSettingsAlt from '@mui/icons-material/AppSettingsAlt';
 import Close from '@mui/icons-material/Close';
+import Code from '@mui/icons-material/Code';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import Download from '@mui/icons-material/Download';
 import Edit from '@mui/icons-material/Edit';
@@ -159,6 +160,17 @@ const AppUserMenu: FC<AppUserMenuProps> = ({
                         <Edit />
                     </ListItemIcon>
                     <ListItemText primary={globalize.translate('MetadataManager')} />
+                </MenuItem>,
+                <MenuItem
+                    key='admin-scripts-link'
+                    component={Link}
+                    to='/scripts'
+                    onClick={onMenuClose}
+                >
+                    <ListItemIcon>
+                        <Code />
+                    </ListItemIcon>
+                    <ListItemText primary='Scripts' />
                 </MenuItem>
             ])}
 

@@ -16,6 +16,23 @@ export declare global {
         'viewshow': CustomEvent;
     }
 
+    interface WebpackRequireContext {
+        keys(): string[];
+        (id: string): any;
+        <T>(id: string): T;
+        resolve(id: string): string;
+        id: string;
+    }
+
+    interface NodeRequire {
+        context(
+            directory: string,
+            useSubdirectories?: boolean,
+            regExp?: RegExp,
+            mode?: 'sync' | 'eager' | 'weak' | 'lazy' | 'lazy-once'
+        ): WebpackRequireContext;
+    }
+
     const __COMMIT_SHA__: string;
     const __JF_BUILD_VERSION__: string;
     const __PACKAGE_JSON_NAME__: string;
