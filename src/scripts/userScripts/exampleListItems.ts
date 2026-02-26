@@ -7,29 +7,29 @@
 
 import { getItemsApi } from '@jellyfin/sdk/lib/utils/api/items-api';
 import { getUserApi } from '@jellyfin/sdk/lib/utils/api/user-api';
-import type { Api } from '@jellyfin/sdk';
+import type { ScriptContext } from '../types/ScriptContext';
 
 export default {
     name: 'List Recent Items',
     description: 'Fetch and display recently added items from your library',
     isExample: true,
-    execute: async (api: Api, log: (message: string) => void) => {
+    execute: async (context: ScriptContext) => {
         try {
-            log('I: Fetching current user information...');
-            const userApi = getUserApi(api);
+            context.log('I: Fetching current user information...');
+            const userApi = getUserApi(context.api);
             const { data: users } = await userApi.getUsers();
             const currentUser = users[0];
 
             if (!currentUser?.Id) {
-                log('E: Could not get user information');
+                context.log('E: Could not get user information');
                 return;
             }
 
-            log(`I: Current user: ${currentUser.Name}`);
-            log('');
-            log('I: Fetching recently added items...');
+            context.log(`I: Current user: ${currentUser.Name}`);
+            context.log('');
+            context.log('I: Fetching recently added items...');
 
-            const itemsApi = getItemsApi(api);
+            const itemsApi = getItemsApi(context.api);
             const { data: items } = await itemsApi.getItems({
                 userId: currentUser.Id,
                 limit: 10,
@@ -40,21 +40,21 @@ export default {
             });
 
             if (!items.Items || items.Items.length === 0) {
-                log('W: No items found in your library.');
+                context.log('W: No items found in your library.');
                 return;
             }
 
-            log(`I: Found ${items.TotalRecordCount} total items. Showing the 10 most recent:`);
-            log('');
+            context.log(`I: Found ${items.TotalRecordCount} total items. Showing the 10 most recent:`);
+            context.log('');
 
             items.Items.forEach((item, index) => {
                 const date = item.DateCreated ?
                     new Date(item.DateCreated).toLocaleDateString() :
                     'Unknown';
-                log(`I: ${index + 1}. ${item.Name} (${item.Type}) - Added: ${date}`);
+                context.log(`I: ${index + 1}. ${item.Name} (${item.Type}) - Added: ${date}`);
             });
         } catch (error) {
-            log('E: ' + (error instanceof Error ? error.message : String(error)));
+            context.log('E: ' + (error instanceof Error ? error.message : String(error)));
             throw error;
         }
     }

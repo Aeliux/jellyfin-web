@@ -1,13 +1,13 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Page from 'components/Page';
 import { useApi } from 'hooks/useApi';
-import type { Api } from '@jellyfin/sdk';
+import type { ScriptContext } from 'scripts/types/ScriptContext';
 
 interface ScriptMetadata {
     name: string;
     description: string;
     isExample?: boolean;
-    execute: (api: Api, log: (message: string) => void) => Promise<void> | void;
+    execute: (context: ScriptContext) => Promise<void> | void;
 }
 
 interface Script {
@@ -19,9 +19,19 @@ interface ConsoleMessage {
     id: string;
     timestamp: string;
     message: string;
+    type?: 'log' | 'input-prompt' | 'confirm-prompt' | 'input-response';
+    inputValue?: string;
 }
 
-type ScriptStatus = 'idle' | 'running' | 'success' | 'error';
+interface PendingInput {
+    scriptId: string;
+    messageId: string;
+    prompt: string;
+    type: 'input' | 'confirm';
+    resolve: (value: string | boolean) => void;
+}
+
+type ScriptStatus = 'idle' | 'running' | 'success' | 'error' | 'skipped' | 'waiting';
 
 interface ConsoleSettings {
     showTimestamp: boolean;
@@ -40,7 +50,10 @@ export const Component = () => {
         new Map()
     );
     const [copiedScriptId, setCopiedScriptId] = useState<string | null>(null);
+    const [pendingInput, setPendingInput] = useState<PendingInput | null>(null);
+    const [inputValue, setInputValue] = useState('');
     const consoleRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+    const scriptStatusOverrides = useRef<Map<string, 'skip' | 'fail'>>(new Map());
 
     // Load all available scripts at mount
     useEffect(() => {
@@ -88,7 +101,7 @@ export const Component = () => {
         setScripts(loadedScripts);
     }, []);
 
-    const log = useCallback((scriptId: string, message: string) => {
+    const log = useCallback((scriptId: string, message: string, type?: 'log' | 'input-prompt' | 'confirm-prompt' | 'input-response') => {
         setConsoleOutput(prev => {
             const newMap = new Map(prev);
             const messages = newMap.get(scriptId) || [];
@@ -96,7 +109,7 @@ export const Component = () => {
             // Using timestamp + random for unique ID (not for security purposes)
             // eslint-disable-next-line sonarjs/pseudo-random
             const id = `${Date.now()}-${Math.random().toString(36).substring(2)}`;
-            newMap.set(scriptId, [...messages, { id, timestamp, message }]);
+            newMap.set(scriptId, [...messages, { id, timestamp, message, type }]);
             return newMap;
         });
 
@@ -112,6 +125,77 @@ export const Component = () => {
         }, 10);
     }, []);
 
+    const handleUserInput = useCallback((scriptId: string, prompt: string, type: 'input' | 'confirm'): Promise<string | boolean> => {
+        return new Promise((resolve) => {
+            const messageType = type === 'confirm' ? 'confirm-prompt' : 'input-prompt';
+            log(scriptId, prompt, messageType);
+            const messageId = `${Date.now()}-${Math.random().toString(36).substring(2)}`;
+
+            // Set waiting status
+            setScriptStatuses(prev => {
+                const newMap = new Map(prev);
+                newMap.set(scriptId, 'waiting');
+                return newMap;
+            });
+
+            setPendingInput({
+                scriptId,
+                messageId,
+                prompt,
+                type,
+                resolve: resolve as (value: string | boolean) => void
+            });
+        });
+    }, [log]);
+
+    const submitInput = useCallback((value?: string) => {
+        if (!pendingInput) return;
+
+        const { scriptId, type, resolve } = pendingInput;
+        const finalValue = value !== undefined ? value : inputValue;
+
+        if (type === 'input') {
+            log(scriptId, finalValue || '(empty)', 'input-response');
+            resolve(finalValue);
+        } else {
+            // For confirm
+            const confirmed = finalValue.toLowerCase() === 'yes';
+            log(scriptId, confirmed ? 'Yes' : 'No', 'input-response');
+            resolve(confirmed);
+        }
+
+        // Reset waiting status back to running
+        setScriptStatuses(prev => {
+            const newMap = new Map(prev);
+            newMap.set(scriptId, 'running');
+            return newMap;
+        });
+
+        setPendingInput(null);
+        setInputValue('');
+    }, [pendingInput, inputValue, log]);
+
+    const cancelInput = useCallback(() => {
+        if (!pendingInput) return;
+
+        const { scriptId, type, resolve } = pendingInput;
+
+        log(scriptId, 'W: User cancelled input');
+
+        // Reject with empty/false
+        resolve(type === 'input' ? '' : false);
+
+        // Reset back to running
+        setScriptStatuses(prev => {
+            const newMap = new Map(prev);
+            newMap.set(scriptId, 'running');
+            return newMap;
+        });
+
+        setPendingInput(null);
+        setInputValue('');
+    }, [pendingInput, log]);
+
     const runScript = useCallback(async (script: Script) => {
         if (!api) {
             console.error('API not available');
@@ -119,7 +203,21 @@ export const Component = () => {
         }
 
         const scriptId = script.id;
+
+        // Prevent running if already running or waiting for input
+        if (runningScripts.has(scriptId)) {
+            log(scriptId, 'W: Script is already running');
+            return;
+        }
+
+        // Prevent running if another script is waiting for input
+        if (pendingInput && pendingInput.scriptId !== scriptId) {
+            log(scriptId, 'W: Another script is waiting for input');
+            return;
+        }
+
         const startTime = performance.now();
+        scriptStatusOverrides.current.delete(scriptId);
 
         setRunningScripts(prev => new Set(prev).add(scriptId));
         setScriptStatuses(prev => {
@@ -135,14 +233,54 @@ export const Component = () => {
 
         log(scriptId, `Starting script: ${script.metadata.name}`);
 
+        // Create context object
+        const context: ScriptContext = {
+            api,
+            log: (message: string) => log(scriptId, message),
+            input: (prompt: string) => handleUserInput(scriptId, prompt, 'input') as Promise<string>,
+            confirm: (question: string) => handleUserInput(scriptId, question, 'confirm') as Promise<boolean>,
+            skip: (reason?: string) => {
+                scriptStatusOverrides.current.set(scriptId, 'skip');
+                if (reason) {
+                    log(scriptId, `I: Skipped: ${reason}`);
+                }
+            },
+            fail: (reason?: string) => {
+                scriptStatusOverrides.current.set(scriptId, 'fail');
+                if (reason) {
+                    log(scriptId, `E: Failed: ${reason}`);
+                }
+            }
+        };
+
         try {
-            await script.metadata.execute(api, (message: string) => log(scriptId, message));
-            log(scriptId, 'S: Script completed successfully');
-            setScriptStatuses(prev => {
-                const newMap = new Map(prev);
-                newMap.set(scriptId, 'success');
-                return newMap;
-            });
+            await script.metadata.execute(context);
+
+            // Check for status overrides
+            const override = scriptStatusOverrides.current.get(scriptId);
+
+            if (override === 'skip') {
+                log(scriptId, 'I: Script skipped');
+                setScriptStatuses(prev => {
+                    const newMap = new Map(prev);
+                    newMap.set(scriptId, 'skipped');
+                    return newMap;
+                });
+            } else if (override === 'fail') {
+                log(scriptId, 'E: Script failed');
+                setScriptStatuses(prev => {
+                    const newMap = new Map(prev);
+                    newMap.set(scriptId, 'error');
+                    return newMap;
+                });
+            } else {
+                log(scriptId, 'S: Script completed successfully');
+                setScriptStatuses(prev => {
+                    const newMap = new Map(prev);
+                    newMap.set(scriptId, 'success');
+                    return newMap;
+                });
+            }
         } catch (error) {
             log(scriptId, `E: Error: ${error instanceof Error ? error.message : String(error)}`);
             console.error(`Script ${scriptId} error:`, error);
@@ -166,8 +304,19 @@ export const Component = () => {
                 newSet.delete(scriptId);
                 return newSet;
             });
+
+            // Clean up pending input if this script had one
+            setPendingInput(prev => {
+                if (prev?.scriptId === scriptId) {
+                    return null;
+                }
+                return prev;
+            });
+            setInputValue('');
+
+            scriptStatusOverrides.current.delete(scriptId);
         }
-    }, [api, log]);
+    }, [api, log, handleUserInput, runningScripts, pendingInput]);
 
     const getConsoleSettings = useCallback((scriptId: string): ConsoleSettings => {
         return consoleSettings.get(scriptId) || { showTimestamp: true, wordWrap: true, coloredOutput: true };
@@ -227,6 +376,68 @@ export const Component = () => {
             newMap.delete(scriptId);
             return newMap;
         });
+    }, []);
+
+    const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        setInputValue(e.target.value);
+    }, []);
+
+    const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') submitInput();
+        if (e.key === 'Escape') cancelInput();
+    }, [submitInput, cancelInput]);
+
+    const handleConfirmYes = useCallback(() => {
+        submitInput('yes');
+    }, [submitInput]);
+
+    const handleConfirmNo = useCallback(() => {
+        submitInput('no');
+    }, [submitInput]);
+
+    // Inline input button handlers
+    const handleInlineSubmit = useCallback(() => {
+        submitInput();
+    }, [submitInput]);
+
+    const handleInlineInputSubmitEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.backgroundColor = '#ffca28';
+        e.currentTarget.style.transform = 'scale(1.05)';
+    }, []);
+
+    const handleInlineInputSubmitLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.backgroundColor = '#ffc107';
+        e.currentTarget.style.transform = 'scale(1)';
+    }, []);
+
+    const handleInlineCancelEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
+        e.currentTarget.style.transform = 'scale(1.05)';
+    }, []);
+
+    const handleInlineCancelLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+        e.currentTarget.style.transform = 'scale(1)';
+    }, []);
+
+    const handleInlineYesEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.backgroundColor = 'rgba(76, 175, 80, 0.3)';
+        e.currentTarget.style.transform = 'scale(1.05)';
+    }, []);
+
+    const handleInlineYesLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.backgroundColor = 'rgba(76, 175, 80, 0.2)';
+        e.currentTarget.style.transform = 'scale(1)';
+    }, []);
+
+    const handleInlineNoEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.backgroundColor = 'rgba(244, 67, 54, 0.3)';
+        e.currentTarget.style.transform = 'scale(1.05)';
+    }, []);
+
+    const handleInlineNoLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.backgroundColor = 'rgba(244, 67, 54, 0.2)';
+        e.currentTarget.style.transform = 'scale(1)';
     }, []);
 
     // Only admins can access scripts
@@ -337,6 +548,22 @@ export const Component = () => {
                                             onCopy={copyConsoleOutput}
                                             onClear={clearConsole}
                                             consoleRefs={consoleRefs}
+                                            pendingInput={pendingInput}
+                                            inputValue={inputValue}
+                                            onInputChange={handleInputChange}
+                                            onInputKeyDown={handleInputKeyDown}
+                                            onInlineSubmit={handleInlineSubmit}
+                                            onCancelInput={cancelInput}
+                                            onConfirmYes={handleConfirmYes}
+                                            onConfirmNo={handleConfirmNo}
+                                            onInlineInputSubmitEnter={handleInlineInputSubmitEnter}
+                                            onInlineInputSubmitLeave={handleInlineInputSubmitLeave}
+                                            onInlineCancelEnter={handleInlineCancelEnter}
+                                            onInlineCancelLeave={handleInlineCancelLeave}
+                                            onInlineYesEnter={handleInlineYesEnter}
+                                            onInlineYesLeave={handleInlineYesLeave}
+                                            onInlineNoEnter={handleInlineNoEnter}
+                                            onInlineNoLeave={handleInlineNoLeave}
                                         />
                                     );
                                 })}
@@ -364,6 +591,22 @@ interface ScriptCardProps {
     onCopy: (scriptId: string) => void;
     onClear: (scriptId: string) => void;
     consoleRefs: React.MutableRefObject<Map<string, HTMLDivElement>>;
+    pendingInput: PendingInput | null;
+    inputValue: string;
+    onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    onInputKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+    onInlineSubmit: () => void;
+    onCancelInput: () => void;
+    onConfirmYes: () => void;
+    onConfirmNo: () => void;
+    onInlineInputSubmitEnter: (e: React.MouseEvent<HTMLButtonElement>) => void;
+    onInlineInputSubmitLeave: (e: React.MouseEvent<HTMLButtonElement>) => void;
+    onInlineCancelEnter: (e: React.MouseEvent<HTMLButtonElement>) => void;
+    onInlineCancelLeave: (e: React.MouseEvent<HTMLButtonElement>) => void;
+    onInlineYesEnter: (e: React.MouseEvent<HTMLButtonElement>) => void;
+    onInlineYesLeave: (e: React.MouseEvent<HTMLButtonElement>) => void;
+    onInlineNoEnter: (e: React.MouseEvent<HTMLButtonElement>) => void;
+    onInlineNoLeave: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
 const ScriptCard: React.FC<ScriptCardProps> = ({
@@ -380,7 +623,23 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
     onToggleColoredOutput,
     onCopy,
     onClear,
-    consoleRefs
+    consoleRefs,
+    pendingInput,
+    inputValue,
+    onInputChange,
+    onInputKeyDown,
+    onInlineSubmit,
+    onCancelInput,
+    onConfirmYes,
+    onConfirmNo,
+    onInlineInputSubmitEnter,
+    onInlineInputSubmitLeave,
+    onInlineCancelEnter,
+    onInlineCancelLeave,
+    onInlineYesEnter,
+    onInlineYesLeave,
+    onInlineNoEnter,
+    onInlineNoLeave
 }) => {
     const handleRun = useCallback(() => {
         onRun(script);
@@ -412,21 +671,33 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
         }
     }, [consoleRefs, script.id]);
 
-    const getMessageColor = (message: string): string => {
+    const getMessageDisplay = (message: string): { color: string; text: string } => {
         const prefix = message.substring(0, 2);
-        if (prefix === 'S:') return '#4caf50'; // success green
-        if (prefix === 'E:') return '#f44336'; // error red
-        if (prefix === 'W:') return '#ff9800'; // warning orange
-        if (prefix === 'I:') return '#2196f3'; // info blue
-        return '#e0e0e0'; // default light gray
+        let color = '#e0e0e0';
+        let text = message;
+
+        if (prefix === 'S:') {
+            color = '#4caf50';
+            text = message.substring(2).trim();
+        } else if (prefix === 'E:') {
+            color = '#f44336';
+            text = message.substring(2).trim();
+        } else if (prefix === 'W:') {
+            color = '#ff9800';
+            text = message.substring(2).trim();
+        } else if (prefix === 'I:') {
+            color = '#2196f3';
+            text = message.substring(2).trim();
+        }
+
+        return { color, text };
     };
 
-    const stripPrefix = (message: string): string => {
-        const prefix = message.substring(0, 2);
-        if (prefix === 'S:' || prefix === 'E:' || prefix === 'W:' || prefix === 'I:') {
-            return message.substring(2).trim();
+    const formatExecutionTime = (ms: number): string => {
+        if (ms >= 10000) {
+            return `${(ms / 1000).toFixed(2)}s`;
         }
-        return message;
+        return `${ms}ms`;
     };
 
     const getCardStyle = (): React.CSSProperties => {
@@ -450,6 +721,13 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                     borderColor: 'rgba(33, 150, 243, 0.4)',
                     boxShadow: '0 4px 20px rgba(33, 150, 243, 0.3)'
                 };
+            case 'waiting':
+                return {
+                    ...baseStyle,
+                    backgroundColor: 'rgba(255, 193, 7, 0.12)',
+                    borderColor: 'rgba(255, 193, 7, 0.5)',
+                    boxShadow: '0 0 25px rgba(255, 193, 7, 0.4)'
+                };
             case 'success':
                 return {
                     ...baseStyle,
@@ -463,6 +741,13 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                     backgroundColor: 'rgba(244, 67, 54, 0.12)',
                     borderColor: 'rgba(244, 67, 54, 0.4)',
                     boxShadow: '0 2px 12px rgba(244, 67, 54, 0.2)'
+                };
+            case 'skipped':
+                return {
+                    ...baseStyle,
+                    backgroundColor: 'rgba(158, 158, 158, 0.08)',
+                    borderColor: 'rgba(158, 158, 158, 0.3)',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
                 };
             default: // idle
                 return {
@@ -481,6 +766,12 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                     color: '#fff',
                     boxShadow: '0 4px 20px rgba(33, 150, 243, 0.5), 0 0 30px rgba(33, 150, 243, 0.2)'
                 };
+            case 'waiting':
+                return {
+                    background: 'linear-gradient(135deg, #ffc107 0%, #ffa000 100%)',
+                    color: '#000',
+                    boxShadow: '0 4px 20px rgba(255, 193, 7, 0.6), 0 0 35px rgba(255, 193, 7, 0.3)'
+                };
             case 'success':
                 return {
                     background: 'linear-gradient(135deg, #4caf50 0%, #2e7d32 100%)',
@@ -493,6 +784,12 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                     color: '#fff',
                     boxShadow: '0 4px 15px rgba(244, 67, 54, 0.4)'
                 };
+            case 'skipped':
+                return {
+                    background: 'linear-gradient(135deg, #9e9e9e 0%, #757575 100%)',
+                    color: '#fff',
+                    boxShadow: '0 2px 10px rgba(158, 158, 158, 0.3)'
+                };
             default: // idle
                 return {
                     background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
@@ -501,16 +798,37 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                 };
         }
     };
+    const getCardIcon = (): string => {
+        if (status === 'running') return 'pending';
+        if (status === 'waiting') return 'hourglass_empty';
+        return 'code';
+    };
+
     const getButtonIcon = (): string => {
+        if (status === 'waiting') return 'hourglass_empty';
         if (isRunning) return 'autorenew';
         if (status === 'success') return 'check_circle';
         if (status === 'error') return 'error';
+        if (status === 'skipped') return 'block';
         return 'play_arrow';
+    };
+
+    const getButtonClass = (): string => {
+        if (status === 'waiting') return 'waiting';
+        if (isRunning) return 'running';
+        return status;
+    };
+
+    const getButtonText = (): string => {
+        if (status === 'waiting') return 'Waiting...';
+        if (isRunning) return 'Running...';
+        return 'Run';
     };
 
     const getExecutionTimeColor = (): string => {
         if (status === 'success') return '#4caf50';
         if (status === 'error') return '#f44336';
+        if (status === 'skipped') return '#9e9e9e';
         return '#999';
     };
 
@@ -518,24 +836,24 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
         if (status === 'success') return '#4caf50';
         if (status === 'error') return '#f44336';
         if (status === 'running') return '#2196f3';
+        if (status === 'waiting') return '#ffc107';
+        if (status === 'skipped') return '#9e9e9e';
         return '#6366f1';
     };
 
     const handleMouseEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        if (!isRunning) {
+        if (!isRunning && status !== 'waiting') {
             e.currentTarget.style.transform = 'scale(1.08) translateY(-2px)';
             const currentShadow = e.currentTarget.style.boxShadow || '';
             e.currentTarget.style.boxShadow = currentShadow.replace(/0 \d+px/, '0 8px');
         }
-    }, [isRunning]);
+    }, [isRunning, status]);
 
     const handleMouseLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        if (!isRunning) {
+        if (!isRunning && status !== 'waiting') {
             e.currentTarget.style.transform = 'scale(1)';
             let baseShadow = '0 2px 10px rgba(99, 102, 241, 0.3)';
-            if (status === 'running') {
-                baseShadow = '0 4px 20px rgba(33, 150, 243, 0.5), 0 0 30px rgba(33, 150, 243, 0.2)';
-            } else if (status === 'success') {
+            if (status === 'success') {
                 baseShadow = '0 4px 15px rgba(76, 175, 80, 0.4)';
             } else if (status === 'error') {
                 baseShadow = '0 4px 15px rgba(244, 67, 54, 0.4)';
@@ -550,6 +868,17 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                     @keyframes pulse-glow {
                         0%, 100% { box-shadow: 0 0 20px rgba(33, 150, 243, 0.4); }
                         50% { box-shadow: 0 0 30px rgba(33, 150, 243, 0.6); }
+                    }
+                    
+                    @keyframes waiting-pulse {
+                        0%, 100% { 
+                            box-shadow: 0 0 25px rgba(255, 193, 7, 0.4), 0 0 60px rgba(255, 193, 7, 0.2);
+                            border-color: rgba(255, 193, 7, 0.5);
+                        }
+                        50% { 
+                            box-shadow: 0 0 40px rgba(255, 193, 7, 0.7), 0 0 80px rgba(255, 193, 7, 0.4);
+                            border-color: rgba(255, 193, 7, 0.8);
+                        }
                     }
                     
                     @keyframes spin {
@@ -601,6 +930,10 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                         animation: pulse-glow 2s ease-in-out infinite;
                     }
                     
+                    .script-card.waiting {
+                        animation: waiting-pulse 1.5s ease-in-out infinite;
+                    }
+                    
                     .script-card.success {
                         animation: success-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
                     }
@@ -638,7 +971,8 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                         transform: scale(1.15);
                     }
                     
-                    .script-run-button.running .material-icons {
+                    .script-run-button.running .material-icons,
+                    .script-run-button.waiting .material-icons {
                         animation: spin 1.2s linear infinite;
                     }
                     
@@ -660,6 +994,10 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                         }
                         
                         .run-button-text {
+                            display: none !important;
+                        }
+                        
+                        .script-card-icon {
                             display: none !important;
                         }
                     }
@@ -782,11 +1120,11 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                             userSelect: 'none',
                             cursor: 'default'
                         }}>
-                            <span className='material-icons' style={{
+                            <span className='material-icons script-card-icon' style={{
                                 fontSize: '1.3em',
                                 color: getIconColor()
                             }}>
-                                {status === 'running' ? 'pending' : 'code'}
+                                {getCardIcon()}
                             </span>
                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {script.metadata.name}
@@ -818,18 +1156,19 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                         <button
                             type='button'
                             onClick={handleRun}
-                            disabled={isRunning}
-                            className={`script-run-button ${isRunning ? 'running' : status}`}
+                            disabled={isRunning || status === 'waiting'}
+                            className={`script-run-button ${getButtonClass()}`}
                             style={{
                                 display: 'flex',
                                 alignItems: 'center',
+                                justifyContent: 'center',
                                 gap: '0.5em',
                                 padding: '0.7em 1.25em',
                                 fontSize: '0.95em',
                                 fontWeight: '600',
                                 border: 'none',
                                 borderRadius: '20px',
-                                cursor: isRunning ? 'not-allowed' : 'pointer',
+                                cursor: (isRunning || status === 'waiting') ? 'not-allowed' : 'pointer',
                                 whiteSpace: 'nowrap',
                                 userSelect: 'none',
                                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -838,10 +1177,10 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                             onMouseEnter={handleMouseEnter}
                             onMouseLeave={handleMouseLeave}
                         >
-                            <span className='material-icons' style={{ fontSize: '1.1em' }}>
+                            <span className='material-icons' style={{ fontSize: '1.1em', lineHeight: 1 }}>
                                 {getButtonIcon()}
                             </span>
-                            <span className='run-button-text'>{isRunning ? 'Running...' : 'Run'}</span>
+                            <span className='run-button-text' style={{ lineHeight: 1 }}>{getButtonText()}</span>
                         </button>
 
                         {/* Execution Time - Always Takes Space */}
@@ -849,9 +1188,10 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                             height: '20px',
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'flex-end'
+                            justifyContent: 'center',
+                            width: '100%'
                         }}>
-                            {executionTime !== undefined && !isRunning && (
+                            {executionTime !== undefined && !isRunning && status !== 'waiting' && (
                                 <span style={{
                                     fontSize: '0.75em',
                                     color: getExecutionTimeColor(),
@@ -864,7 +1204,7 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                                     cursor: 'default'
                                 }}>
                                     <span className='material-icons' style={{ fontSize: '1em' }}>schedule</span>
-                                    {executionTime}ms
+                                    {formatExecutionTime(executionTime)}
                                 </span>
                             )}
                         </div>
@@ -1080,25 +1420,172 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                                 borderRadius: '0 0 6px 6px'
                             }}
                         >
-                            {output.map((entry) => (
-                                <div key={entry.id} className='console-line' style={{
-                                    marginBottom: '0.4em'
-                                }}>
-                                    {settings.showTimestamp && (
-                                        <span style={{
-                                            color: '#666',
-                                            marginRight: '0.75em',
-                                            fontSize: '0.9em',
-                                            userSelect: 'none'
-                                        }}>
-                                            {entry.timestamp}
-                                        </span>
-                                    )}
-                                    <span style={{ color: settings.coloredOutput ? getMessageColor(entry.message) : '#e0e0e0' }}>
-                                        {stripPrefix(entry.message)}
-                                    </span>
-                                </div>
-                            ))}
+                            {output.map((entry) => {
+                                const isInputPrompt = entry.type === 'input-prompt';
+                                const isConfirmPrompt = entry.type === 'confirm-prompt';
+                                const isInputResponse = entry.type === 'input-response';
+                                const isWaitingForThis = pendingInput?.scriptId === script.id
+                                    && (isInputPrompt || isConfirmPrompt);
+
+                                return (
+                                    <div key={entry.id} className='console-line' style={{
+                                        marginBottom: '0.4em'
+                                    }}>
+                                        {settings.showTimestamp && (
+                                            <span style={{
+                                                color: '#666',
+                                                marginRight: '0.75em',
+                                                fontSize: '0.9em',
+                                                userSelect: 'none'
+                                            }}>
+                                                {entry.timestamp}
+                                            </span>
+                                        )}
+
+                                        {/* Regular message or prompt text */}
+                                        {!isInputResponse && (() => {
+                                            const msgDisplay = settings.coloredOutput ? getMessageDisplay(entry.message) : { color: '#e0e0e0', text: entry.message };
+                                            return (
+                                                <span style={{
+                                                    color: msgDisplay.color,
+                                                    fontWeight: (isInputPrompt || isConfirmPrompt) ? '600' : 'normal'
+                                                }}>
+                                                    {isInputPrompt && '❓ '}
+                                                    {isConfirmPrompt && '❔ '}
+                                                    {msgDisplay.text}
+                                                </span>
+                                            );
+                                        })()}
+
+                                        {/* Input response display */}
+                                        {isInputResponse && (
+                                            <span style={{
+                                                color: '#ffc107',
+                                                fontWeight: '600'
+                                            }}>
+                                                → {entry.message}
+                                            </span>
+                                        )}
+
+                                        {/* Inline input field - only show if this is the active input */}
+                                        {isInputPrompt && isWaitingForThis && pendingInput.type === 'input' && (
+                                            <div style={{
+                                                display: 'flex',
+                                                gap: '0.5em',
+                                                marginTop: '0.5em',
+                                                alignItems: 'center'
+                                            }}>
+                                                <input
+                                                    type='text'
+                                                    value={inputValue}
+                                                    onChange={onInputChange}
+                                                    onKeyDown={onInputKeyDown}
+                                                    style={{
+                                                        flex: 1,
+                                                        padding: '0.5em 0.75em',
+                                                        fontSize: '0.9em',
+                                                        backgroundColor: '#2a2a2a',
+                                                        border: '2px solid rgba(255, 193, 7, 0.5)',
+                                                        borderRadius: '4px',
+                                                        color: '#fff',
+                                                        outline: 'none',
+                                                        fontFamily: 'inherit'
+                                                    }}
+                                                    placeholder='Enter value...'
+                                                />
+                                                <button
+                                                    type='button'
+                                                    onClick={onInlineSubmit}
+                                                    style={{
+                                                        padding: '0.5em 1em',
+                                                        fontSize: '0.9em',
+                                                        fontWeight: '600',
+                                                        backgroundColor: '#ffc107',
+                                                        border: 'none',
+                                                        borderRadius: '4px',
+                                                        color: '#000',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                    onMouseEnter={onInlineInputSubmitEnter}
+                                                    onMouseLeave={onInlineInputSubmitLeave}
+                                                >
+                                                    Submit
+                                                </button>
+                                                <button
+                                                    type='button'
+                                                    onClick={onCancelInput}
+                                                    style={{
+                                                        padding: '0.5em 1em',
+                                                        fontSize: '0.9em',
+                                                        fontWeight: '600',
+                                                        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                                                        borderRadius: '4px',
+                                                        color: '#ddd',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                    onMouseEnter={onInlineCancelEnter}
+                                                    onMouseLeave={onInlineCancelLeave}
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {/* Inline confirmation buttons - only show if this is the active confirmation */}
+                                        {isConfirmPrompt && isWaitingForThis && pendingInput.type === 'confirm' && (
+                                            <div style={{
+                                                display: 'flex',
+                                                gap: '5em',
+                                                marginTop: '0.5em'
+                                            }}>
+                                                <button
+                                                    type='button'
+                                                    onClick={onConfirmYes}
+                                                    style={{
+                                                        flex: 1,
+                                                        padding: '0.4em 0.8em',
+                                                        fontSize: '0.85em',
+                                                        fontWeight: '600',
+                                                        backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                                                        border: '2px solid #4caf50',
+                                                        borderRadius: '4px',
+                                                        color: '#4caf50',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                    onMouseEnter={onInlineYesEnter}
+                                                    onMouseLeave={onInlineYesLeave}
+                                                >
+                                                    Yes
+                                                </button>
+                                                <button
+                                                    type='button'
+                                                    onClick={onConfirmNo}
+                                                    style={{
+                                                        flex: 1,
+                                                        padding: '0.4em 0.8em',
+                                                        fontSize: '0.85em',
+                                                        fontWeight: '600',
+                                                        backgroundColor: 'rgba(244, 67, 54, 0.2)',
+                                                        border: '2px solid #f44336',
+                                                        borderRadius: '4px',
+                                                        color: '#f44336',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                    onMouseEnter={onInlineNoEnter}
+                                                    onMouseLeave={onInlineNoLeave}
+                                                >
+                                                    No
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 )}
