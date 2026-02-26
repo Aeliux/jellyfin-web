@@ -64,9 +64,12 @@ Scripts are discovered and compiled at build time using Webpack's `require.conte
 ## Examples
 
 See the example scripts in this directory for common use cases:
-- `exampleHelloWorld.ts` - Basic script structure
-- `exampleListItems.ts` - Fetch and display library items
-- `exampleCleanup.ts` - Perform cleanup tasks
+- `exampleHelloWorld.ts` - Basic script structure (TypeScript)
+- `exampleListItems.ts` - Fetch and display library items (TypeScript)
+- `exampleServerInfo.ts` - Display server information (TypeScript)
+- `exampleMediaYears.js` - List media items by production year (JavaScript)
+
+Scripts can be written in either TypeScript (.ts) or JavaScript (.js).
 
 ## Security
 
