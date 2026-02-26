@@ -83,3 +83,14 @@ Scripts can only be accessed and executed by administrator users.
 - Call `log()` frequently to provide feedback
 - Handle errors gracefully with try/catch
 - Test scripts thoroughly before deploying
+- Use the `confirm` dialog for user confirmations:
+  ```javascript
+  import confirm from 'components/confirm/confirm';
+  
+  await confirm({
+      title: 'Confirm Action',
+      text: 'Are you sure you want to proceed?',
+      confirmText: 'Yes',
+      cancelText: 'No'
+  });
+  ```

@@ -34,6 +34,7 @@ export default {
                 userId: currentUser.Id,
                 recursive: true,
                 includeItemTypes: ['Movie', 'Series', 'Episode', 'MusicAlbum', 'Audio', 'Book'],
+                excludeItemTypes: ['Folder', 'BoxSet', 'CollectionFolder'],
                 fields: ['ProductionYear', 'PremiereDate'],
                 sortBy: ['ProductionYear'],
                 sortOrder: ['Descending']
@@ -54,6 +55,12 @@ export default {
 
             items.Items.forEach((item) => {
                 const year = item.ProductionYear;
+
+                // Detect non-movie items
+                if (item.Type !== 'Movie' && item.Type !== 'Series' && item.Type !== 'Episode') {
+                    log(`W: Skipping non-movie/series/episode item: ${item.Name} [${item.Type}]`);
+                    return;
+                }
 
                 if (year) {
                     itemsWithYear++;
