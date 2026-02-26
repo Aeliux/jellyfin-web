@@ -646,6 +646,24 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                     }
                     
+                    @media (max-width: 640px) {
+                        .console-title {
+                            display: none !important;
+                        }
+                        
+                        .console-toolbar {
+                            justify-content: center !important;
+                        }
+                        
+                        .console-buttons {
+                            justify-content: center;
+                        }
+                        
+                        .run-button-text {
+                            display: none !important;
+                        }
+                    }
+                    
                     .console-toolbar-button {
                         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
                         opacity: 0.85;
@@ -814,6 +832,7 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                                 cursor: isRunning ? 'not-allowed' : 'pointer',
                                 whiteSpace: 'nowrap',
                                 userSelect: 'none',
+                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                                 ...getButtonStyle()
                             }}
                             onMouseEnter={handleMouseEnter}
@@ -822,7 +841,7 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                             <span className='material-icons' style={{ fontSize: '1.1em' }}>
                                 {getButtonIcon()}
                             </span>
-                            <span>{isRunning ? 'Running...' : 'Run'}</span>
+                            <span className='run-button-text'>{isRunning ? 'Running...' : 'Run'}</span>
                         </button>
 
                         {/* Execution Time - Always Takes Space */}
@@ -859,9 +878,11 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                         width: '100%',
                         boxSizing: 'border-box',
                         borderRadius: '6px',
-                        overflow: 'hidden',
+                        overflow: 'visible',
                         border: '1px solid rgba(99, 102, 241, 0.15)',
-                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+                        position: 'relative',
+                        zIndex: 1
                     }}>
                         {/* Console Toolbar */}
                         <div className='console-toolbar' style={{
@@ -875,9 +896,13 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                             flexWrap: 'wrap',
                             userSelect: 'none',
                             width: '100%',
-                            boxSizing: 'border-box'
+                            boxSizing: 'border-box',
+                            overflow: 'visible',
+                            position: 'relative',
+                            zIndex: 2,
+                            borderRadius: '6px 6px 0 0'
                         }}>
-                            <div style={{
+                            <div className='console-title' style={{
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '0.4em',
@@ -894,7 +919,7 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                                 <span style={{ color: '#999' }}>{output.length}</span>
                             </div>
 
-                            <div style={{ display: 'flex', gap: '0.35em' }}>
+                            <div className='console-buttons' style={{ display: 'flex', gap: '0.35em' }}>
                                 <button
                                     type='button'
                                     onClick={handleCopy}
@@ -1051,7 +1076,8 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                                 borderTop: '1px solid rgba(99, 102, 241, 0.1)',
                                 lineHeight: '1.6',
                                 width: '100%',
-                                boxSizing: 'border-box'
+                                boxSizing: 'border-box',
+                                borderRadius: '0 0 6px 6px'
                             }}
                         >
                             {output.map((entry) => (
