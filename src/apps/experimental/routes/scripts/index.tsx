@@ -401,43 +401,43 @@ export const Component = () => {
     }, [submitInput]);
 
     const handleInlineInputSubmitEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        e.currentTarget.style.backgroundColor = '#ffca28';
-        e.currentTarget.style.transform = 'scale(1.05)';
+        e.currentTarget.style.backgroundColor = 'rgba(255, 193, 7, 0.35)';
+        e.currentTarget.style.borderColor = 'rgba(255, 193, 7, 0.8)';
     }, []);
 
     const handleInlineInputSubmitLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        e.currentTarget.style.backgroundColor = '#ffc107';
-        e.currentTarget.style.transform = 'scale(1)';
+        e.currentTarget.style.backgroundColor = 'rgba(255, 193, 7, 0.25)';
+        e.currentTarget.style.borderColor = 'rgba(255, 193, 7, 0.6)';
     }, []);
 
     const handleInlineCancelEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
-        e.currentTarget.style.transform = 'scale(1.05)';
+        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.12)';
+        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.35)';
     }, []);
 
     const handleInlineCancelLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
-        e.currentTarget.style.transform = 'scale(1)';
+        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)';
     }, []);
 
     const handleInlineYesEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        e.currentTarget.style.backgroundColor = 'rgba(76, 175, 80, 0.3)';
-        e.currentTarget.style.transform = 'scale(1.05)';
+        e.currentTarget.style.backgroundColor = 'rgba(76, 175, 80, 0.25)';
+        e.currentTarget.style.borderColor = 'rgba(76, 175, 80, 0.7)';
     }, []);
 
     const handleInlineYesLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        e.currentTarget.style.backgroundColor = 'rgba(76, 175, 80, 0.2)';
-        e.currentTarget.style.transform = 'scale(1)';
+        e.currentTarget.style.backgroundColor = 'rgba(76, 175, 80, 0.15)';
+        e.currentTarget.style.borderColor = 'rgba(76, 175, 80, 0.5)';
     }, []);
 
     const handleInlineNoEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        e.currentTarget.style.backgroundColor = 'rgba(244, 67, 54, 0.3)';
-        e.currentTarget.style.transform = 'scale(1.05)';
+        e.currentTarget.style.backgroundColor = 'rgba(244, 67, 54, 0.25)';
+        e.currentTarget.style.borderColor = 'rgba(244, 67, 54, 0.7)';
     }, []);
 
     const handleInlineNoLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        e.currentTarget.style.backgroundColor = 'rgba(244, 67, 54, 0.2)';
-        e.currentTarget.style.transform = 'scale(1)';
+        e.currentTarget.style.backgroundColor = 'rgba(244, 67, 54, 0.15)';
+        e.currentTarget.style.borderColor = 'rgba(244, 67, 54, 0.5)';
     }, []);
 
     // Only admins can access scripts
@@ -1000,6 +1000,10 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                         .script-card-icon {
                             display: none !important;
                         }
+                        
+                        .inline-button-text {
+                            display: none !important;
+                        }
                     }
                     
                     .console-toolbar-button {
@@ -1472,7 +1476,7 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                                             <div style={{
                                                 display: 'flex',
                                                 gap: '0.5em',
-                                                marginTop: '0.5em',
+                                                marginTop: '0.4em',
                                                 alignItems: 'center'
                                             }}>
                                                 <input
@@ -1482,14 +1486,15 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                                                     onKeyDown={onInputKeyDown}
                                                     style={{
                                                         flex: 1,
-                                                        padding: '0.5em 0.75em',
+                                                        padding: '0.35em 0.6em',
                                                         fontSize: '0.9em',
                                                         backgroundColor: '#2a2a2a',
-                                                        border: '2px solid rgba(255, 193, 7, 0.5)',
-                                                        borderRadius: '4px',
+                                                        border: '1px solid rgba(255, 193, 7, 0.5)',
+                                                        borderRadius: '3px',
                                                         color: '#fff',
                                                         outline: 'none',
-                                                        fontFamily: 'inherit'
+                                                        fontFamily: 'inherit',
+                                                        lineHeight: '1.4'
                                                     }}
                                                     placeholder='Enter value...'
                                                 />
@@ -1497,91 +1502,122 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                                                     type='button'
                                                     onClick={onInlineSubmit}
                                                     style={{
-                                                        padding: '0.5em 1em',
+                                                        padding: '0.35em 0.6em',
                                                         fontSize: '0.9em',
                                                         fontWeight: '600',
-                                                        backgroundColor: '#ffc107',
-                                                        border: 'none',
-                                                        borderRadius: '4px',
-                                                        color: '#000',
+                                                        backgroundColor: 'rgba(255, 193, 7, 0.25)',
+                                                        border: '1px solid rgba(255, 193, 7, 0.6)',
+                                                        borderRadius: '3px',
+                                                        color: '#ffc107',
                                                         cursor: 'pointer',
-                                                        transition: 'all 0.2s'
+                                                        transition: 'all 0.2s',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        gap: '0.4em',
+                                                        lineHeight: '1.4',
+                                                        whiteSpace: 'nowrap'
                                                     }}
                                                     onMouseEnter={onInlineInputSubmitEnter}
                                                     onMouseLeave={onInlineInputSubmitLeave}
+                                                    title='Submit'
                                                 >
-                                                    Submit
+                                                    <span className='material-icons' style={{ fontSize: '1em', lineHeight: 1 }}>check</span>
+                                                    <span className='inline-button-text'>Submit</span>
                                                 </button>
                                                 <button
                                                     type='button'
                                                     onClick={onCancelInput}
                                                     style={{
-                                                        padding: '0.5em 1em',
+                                                        padding: '0.35em 0.6em',
                                                         fontSize: '0.9em',
                                                         fontWeight: '600',
-                                                        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                                                        border: '1px solid rgba(255, 255, 255, 0.2)',
-                                                        borderRadius: '4px',
-                                                        color: '#ddd',
+                                                        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                                                        border: '1px solid rgba(255, 255, 255, 0.25)',
+                                                        borderRadius: '3px',
+                                                        color: '#aaa',
                                                         cursor: 'pointer',
-                                                        transition: 'all 0.2s'
+                                                        transition: 'all 0.2s',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        gap: '0.4em',
+                                                        lineHeight: '1.4',
+                                                        whiteSpace: 'nowrap'
                                                     }}
                                                     onMouseEnter={onInlineCancelEnter}
                                                     onMouseLeave={onInlineCancelLeave}
+                                                    title='Cancel'
                                                 >
-                                                    Cancel
+                                                    <span className='material-icons' style={{ fontSize: '1em', lineHeight: 1 }}>close</span>
+                                                    <span className='inline-button-text'>Cancel</span>
                                                 </button>
                                             </div>
                                         )}
 
                                         {/* Inline confirmation buttons - only show if this is the active confirmation */}
                                         {isConfirmPrompt && isWaitingForThis && pendingInput.type === 'confirm' && (
-                                            <div style={{
-                                                display: 'flex',
-                                                gap: '5em',
-                                                marginTop: '0.5em'
+                                            <span style={{
+                                                display: 'inline-flex',
+                                                gap: '0.5em',
+                                                marginLeft: '0.5em',
+                                                verticalAlign: 'middle'
                                             }}>
                                                 <button
                                                     type='button'
                                                     onClick={onConfirmYes}
                                                     style={{
-                                                        flex: 1,
-                                                        padding: '0.4em 0.8em',
-                                                        fontSize: '0.85em',
-                                                        fontWeight: '600',
-                                                        backgroundColor: 'rgba(76, 175, 80, 0.2)',
-                                                        border: '2px solid #4caf50',
-                                                        borderRadius: '4px',
+                                                        padding: '0.25em 0.5em',
+                                                        fontSize: '0.9em',
+                                                        fontWeight: '500',
+                                                        backgroundColor: 'rgba(76, 175, 80, 0.15)',
+                                                        border: '1px solid rgba(76, 175, 80, 0.5)',
+                                                        borderRadius: '3px',
                                                         color: '#4caf50',
                                                         cursor: 'pointer',
-                                                        transition: 'all 0.2s'
+                                                        transition: 'all 0.15s',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        gap: '0.35em',
+                                                        lineHeight: 1,
+                                                        whiteSpace: 'nowrap'
                                                     }}
                                                     onMouseEnter={onInlineYesEnter}
                                                     onMouseLeave={onInlineYesLeave}
+                                                    title='Yes'
                                                 >
-                                                    Yes
+                                                    <span className='material-icons' style={{ fontSize: '0.9em', lineHeight: 1 }}>check</span>
+                                                    <span className='inline-button-text'>Yes</span>
                                                 </button>
                                                 <button
                                                     type='button'
                                                     onClick={onConfirmNo}
                                                     style={{
-                                                        flex: 1,
-                                                        padding: '0.4em 0.8em',
-                                                        fontSize: '0.85em',
-                                                        fontWeight: '600',
-                                                        backgroundColor: 'rgba(244, 67, 54, 0.2)',
-                                                        border: '2px solid #f44336',
-                                                        borderRadius: '4px',
+                                                        padding: '0.25em 0.5em',
+                                                        fontSize: '0.9em',
+                                                        fontWeight: '500',
+                                                        backgroundColor: 'rgba(244, 67, 54, 0.15)',
+                                                        border: '1px solid rgba(244, 67, 54, 0.5)',
+                                                        borderRadius: '3px',
                                                         color: '#f44336',
                                                         cursor: 'pointer',
-                                                        transition: 'all 0.2s'
+                                                        transition: 'all 0.15s',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        gap: '0.35em',
+                                                        lineHeight: 1,
+                                                        whiteSpace: 'nowrap'
                                                     }}
                                                     onMouseEnter={onInlineNoEnter}
                                                     onMouseLeave={onInlineNoLeave}
+                                                    title='No'
                                                 >
-                                                    No
+                                                    <span className='material-icons' style={{ fontSize: '0.9em', lineHeight: 1 }}>close</span>
+                                                    <span className='inline-button-text'>No</span>
                                                 </button>
-                                            </div>
+                                            </span>
                                         )}
                                     </div>
                                 );
