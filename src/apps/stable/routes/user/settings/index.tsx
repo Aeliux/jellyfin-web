@@ -211,27 +211,6 @@ const UserSettingsPage: FC = () => {
                             </LinkButton>
                         )}
 
-                        {appHost.supports(AppFeature.ClientSettings) && (
-                            <LinkButton
-                                onClick={shell.openClientSettings}
-                                className='clientSettings listItem-border'
-                                style={{
-                                    display: 'block',
-                                    margin: 0,
-                                    padding: 0
-                                }}
-                            >
-                                <div className='listItem'>
-                                    <span className='material-icons listItemIcon listItemIcon-transparent devices_other' aria-hidden='true' />
-                                    <div className='listItemBody'>
-                                        <div className='listItemBodyText'>
-                                            {globalize.translate('ClientSettings')}
-                                        </div>
-                                    </div>
-                                </div>
-                            </LinkButton>
-                        )}
-
                         {isLoggedInUser && !browser.mobile && !isControlsPageEmpty && (
                             <LinkButton
                                 href={`#/mypreferencescontrols?userId=${userId}`}
