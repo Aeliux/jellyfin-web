@@ -15,7 +15,6 @@ export default {
     description: 'Convert production years to premiere dates for media items without premiere dates',
     execute: async (api: Api, log: (message: string) => void) => {
         try {
-            log('I: Fetching current user information...');
             const userApi = getUserApi(api);
             const { data: users } = await userApi.getUsers();
             const currentUser = users[0];
@@ -25,8 +24,6 @@ export default {
                 return;
             }
 
-            log(`I: Current user: ${currentUser.Name}`);
-            log('');
             log('I: Fetching all media items...');
 
             const itemsApi = getItemsApi(api);
@@ -67,8 +64,6 @@ export default {
             // List of items with year and without prod date
             const itemsWithYearNoPremiere: BaseItemDto[] = [];
 
-            log(`I: All items: ${items.Items.length}`);
-
             items.Items.forEach((item) => {
                 const year = item.ProductionYear;
                 if (!year) {
@@ -76,7 +71,6 @@ export default {
                     return;
                 }
                 if (item.PremiereDate) {
-                    log(`S: Item ${item.Name} already have premire date: ${item.PremiereDate}`);
                     return;
                 }
 
@@ -111,15 +105,13 @@ export default {
                 itemsWithYearNoPremiere.push(item);
             });
 
-            log(`I: Items with production year but no premiere date: ${itemsWithYearNoPremiere.length}`);
+            log(`All items: ${items.Items.length}`);
+            log(`Items with production year but no premiere date: ${itemsWithYearNoPremiere.length}`);
 
             if (itemsWithYearNoPremiere.length === 0) {
-                log('');
-                log('I: No items need premiere date updates.');
+                log('No items need premiere date updates.');
+                return;
             }
-
-            log('');
-            log('I: Ready to update premiere dates...');
 
             try {
                 await confirm({
