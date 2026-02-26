@@ -23,6 +23,12 @@ interface ConsoleMessage {
 
 type ScriptStatus = 'idle' | 'running' | 'success' | 'error';
 
+interface ConsoleSettings {
+    showTimestamp: boolean;
+    wordWrap: boolean;
+    coloredOutput: boolean;
+}
+
 export const Component = () => {
     const { api, user } = useApi();
     const [scripts, setScripts] = useState<Script[]>([]);
@@ -30,6 +36,10 @@ export const Component = () => {
     const [scriptStatuses, setScriptStatuses] = useState<Map<string, ScriptStatus>>(new Map());
     const [executionTimes, setExecutionTimes] = useState<Map<string, number>>(new Map());
     const [consoleOutput, setConsoleOutput] = useState<Map<string, ConsoleMessage[]>>(new Map());
+    const [consoleSettings, setConsoleSettings] = useState<Map<string, ConsoleSettings>>(
+        new Map()
+    );
+    const [copiedScriptId, setCopiedScriptId] = useState<string | null>(null);
     const consoleRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
     // Load all available scripts at mount
@@ -90,11 +100,14 @@ export const Component = () => {
             return newMap;
         });
 
-        // Auto-scroll to bottom
+        // Smooth auto-scroll to bottom
         setTimeout(() => {
             const consoleElement = consoleRefs.current.get(scriptId);
             if (consoleElement) {
-                consoleElement.scrollTop = consoleElement.scrollHeight;
+                consoleElement.scrollTo({
+                    top: consoleElement.scrollHeight,
+                    behavior: 'smooth'
+                });
             }
         }, 10);
     }, []);
@@ -156,6 +169,66 @@ export const Component = () => {
         }
     }, [api, log]);
 
+    const getConsoleSettings = useCallback((scriptId: string): ConsoleSettings => {
+        return consoleSettings.get(scriptId) || { showTimestamp: true, wordWrap: true, coloredOutput: true };
+    }, [consoleSettings]);
+
+    const toggleTimestamp = useCallback((scriptId: string) => {
+        setConsoleSettings(prev => {
+            const newMap = new Map(prev);
+            const current = prev.get(scriptId) || { showTimestamp: true, wordWrap: true, coloredOutput: true };
+            newMap.set(scriptId, { ...current, showTimestamp: !current.showTimestamp });
+            return newMap;
+        });
+    }, []);
+
+    const toggleWordWrap = useCallback((scriptId: string) => {
+        setConsoleSettings(prev => {
+            const newMap = new Map(prev);
+            const current = prev.get(scriptId) || { showTimestamp: true, wordWrap: true, coloredOutput: true };
+            newMap.set(scriptId, { ...current, wordWrap: !current.wordWrap });
+            return newMap;
+        });
+    }, []);
+
+    const toggleColoredOutput = useCallback((scriptId: string) => {
+        setConsoleSettings(prev => {
+            const newMap = new Map(prev);
+            const current = prev.get(scriptId) || { showTimestamp: true, wordWrap: true, coloredOutput: true };
+            newMap.set(scriptId, { ...current, coloredOutput: !current.coloredOutput });
+            return newMap;
+        });
+    }, []);
+
+    const copyConsoleOutput = useCallback((scriptId: string) => {
+        const output = consoleOutput.get(scriptId) || [];
+        const settings = getConsoleSettings(scriptId);
+
+        const text = output.map(entry => {
+            const prefix = settings.showTimestamp ? `${entry.timestamp} ` : '';
+            // Strip color prefixes
+            const prefixRegex = /^[SEWI]:$/;
+            const hasPrefix = prefixRegex.exec(entry.message.substring(0, 2));
+            const message = hasPrefix ? entry.message.substring(2).trim() : entry.message;
+            return `${prefix}${message}`;
+        }).join('\n');
+
+        navigator.clipboard.writeText(text).then(() => {
+            setCopiedScriptId(scriptId);
+            setTimeout(() => setCopiedScriptId(null), 2000);
+        }).catch(err => {
+            console.error('Failed to copy:', err);
+        });
+    }, [consoleOutput, getConsoleSettings]);
+
+    const clearConsole = useCallback((scriptId: string) => {
+        setConsoleOutput(prev => {
+            const newMap = new Map(prev);
+            newMap.delete(scriptId);
+            return newMap;
+        });
+    }, []);
+
     // Only admins can access scripts
     if (!user?.Policy?.IsAdministrator) {
         return (
@@ -181,34 +254,93 @@ export const Component = () => {
             shouldAutoFocus
         >
             <div className='padded-left padded-right padded-bottom-page'>
-                <div className='readOnlyContent' style={{ margin: '0 auto' }}>
+                <div className='readOnlyContent' style={{ maxWidth: '1400px', margin: '0 auto' }}>
                     <div className='verticalSection'>
-                        <h2 className='sectionTitle'>Scripts</h2>
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            marginBottom: '1.5em',
+                            flexWrap: 'wrap',
+                            gap: '1em',
+                            userSelect: 'none'
+                        }}>
+                            <h2 className='sectionTitle' style={{ margin: 0, cursor: 'default' }}>User Scripts</h2>
+                            <div style={{
+                                fontSize: '0.9em',
+                                color: '#999',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5em',
+                                cursor: 'default'
+                            }}>
+                                <span className='material-icons' style={{ fontSize: '1.2em' }}>terminal</span>
+                                <span>{scripts.length} script{scripts.length !== 1 ? 's' : ''} available</span>
+                            </div>
+                        </div>
 
                         {scripts.length === 0 ? (
-                            <div className='paperList'>
-                                <p>No scripts available. Create scripts in <code>src/scripts/userScripts/</code> to get started.</p>
+                            <div className='paperList' style={{
+                                padding: '3em 2em',
+                                textAlign: 'center',
+                                backgroundColor: 'rgba(0, 0, 0, 0.02)',
+                                borderRadius: '12px',
+                                border: '2px dashed rgba(255, 255, 255, 0.1)'
+                            }}>
+                                <span className='material-icons' style={{
+                                    fontSize: '4em',
+                                    color: 'rgba(255, 255, 255, 0.1)',
+                                    marginBottom: '0.5em'
+                                }}>code_off</span>
+                                <h3 style={{ margin: '0.5em 0', color: '#999' }}>No Scripts Available</h3>
+                                <p style={{ margin: '0.5em 0', color: '#666' }}>
+                                    Create scripts in <code style={{
+                                        padding: '0.2em 0.5em',
+                                        backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                                        borderRadius: '4px'
+                                    }}>src/scripts/userScripts/</code> to get started
+                                </p>
                             </div>
                         ) : (
-                            scripts.map(script => {
-                                const isRunning = runningScripts.has(script.id);
-                                const status = scriptStatuses.get(script.id) || 'idle';
-                                const executionTime = executionTimes.get(script.id);
-                                const output = consoleOutput.get(script.id) || [];
+                            <div style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '1.5em',
+                                maxWidth: '900px',
+                                width: '100%',
+                                margin: '0 auto',
+                                minWidth: 0
+                            }}>
+                                {scripts.map(script => {
+                                    const scriptId = script.id;
+                                    const isRunning = runningScripts.has(scriptId);
+                                    const status = scriptStatuses.get(scriptId) || 'idle';
+                                    const executionTime = executionTimes.get(scriptId);
+                                    const output = consoleOutput.get(scriptId) || [];
+                                    const settings = getConsoleSettings(scriptId);
+                                    const isCopied = copiedScriptId === scriptId;
 
-                                return (
-                                    <ScriptCard
-                                        key={script.id}
-                                        script={script}
-                                        isRunning={isRunning}
-                                        status={status}
-                                        executionTime={executionTime}
-                                        output={output}
-                                        onRun={runScript}
-                                        consoleRefs={consoleRefs}
-                                    />
-                                );
-                            })
+                                    return (
+                                        <ScriptCard
+                                            key={scriptId}
+                                            script={script}
+                                            isRunning={isRunning}
+                                            status={status}
+                                            executionTime={executionTime}
+                                            output={output}
+                                            settings={settings}
+                                            isCopied={isCopied}
+                                            onRun={runScript}
+                                            onToggleTimestamp={toggleTimestamp}
+                                            onToggleWordWrap={toggleWordWrap}
+                                            onToggleColoredOutput={toggleColoredOutput}
+                                            onCopy={copyConsoleOutput}
+                                            onClear={clearConsole}
+                                            consoleRefs={consoleRefs}
+                                        />
+                                    );
+                                })}
+                            </div>
                         )}
                     </div>
                 </div>
@@ -220,17 +352,59 @@ export const Component = () => {
 interface ScriptCardProps {
     script: Script;
     isRunning: boolean;
-    status: ScriptStatus;
+    status:ScriptStatus;
     executionTime?: number;
     output: ConsoleMessage[];
+    settings: ConsoleSettings;
+    isCopied: boolean;
     onRun: (script: Script) => void;
+    onToggleTimestamp: (scriptId: string) => void;
+    onToggleWordWrap: (scriptId: string) => void;
+    onToggleColoredOutput: (scriptId: string) => void;
+    onCopy: (scriptId: string) => void;
+    onClear: (scriptId: string) => void;
     consoleRefs: React.MutableRefObject<Map<string, HTMLDivElement>>;
 }
 
-const ScriptCard: React.FC<ScriptCardProps> = ({ script, isRunning, status, executionTime, output, onRun, consoleRefs }) => {
+const ScriptCard: React.FC<ScriptCardProps> = ({
+    script,
+    isRunning,
+    status,
+    executionTime,
+    output,
+    settings,
+    isCopied,
+    onRun,
+    onToggleTimestamp,
+    onToggleWordWrap,
+    onToggleColoredOutput,
+    onCopy,
+    onClear,
+    consoleRefs
+}) => {
     const handleRun = useCallback(() => {
         onRun(script);
     }, [onRun, script]);
+
+    const handleToggleTimestamp = useCallback(() => {
+        onToggleTimestamp(script.id);
+    }, [onToggleTimestamp, script.id]);
+
+    const handleToggleWordWrap = useCallback(() => {
+        onToggleWordWrap(script.id);
+    }, [onToggleWordWrap, script.id]);
+
+    const handleToggleColoredOutput = useCallback(() => {
+        onToggleColoredOutput(script.id);
+    }, [onToggleColoredOutput, script.id]);
+
+    const handleCopy = useCallback(() => {
+        onCopy(script.id);
+    }, [onCopy, script.id]);
+
+    const handleClear = useCallback(() => {
+        onClear(script.id);
+    }, [onClear, script.id]);
 
     const setConsoleRef = useCallback((el: HTMLDivElement | null) => {
         if (el) {
@@ -258,34 +432,43 @@ const ScriptCard: React.FC<ScriptCardProps> = ({ script, isRunning, status, exec
     const getCardStyle = (): React.CSSProperties => {
         const baseStyle: React.CSSProperties = {
             padding: '1.5em',
-            borderRadius: '8px',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            transition: 'background-color 0.3s ease, box-shadow 0.3s ease'
+            borderRadius: '12px',
+            border: '2px solid rgba(255, 255, 255, 0.1)',
+            transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+            display: 'flex',
+            flexDirection: 'column',
+            width: '100%',
+            minWidth: 0,
+            boxSizing: 'border-box'
         };
 
         switch (status) {
             case 'running':
                 return {
                     ...baseStyle,
-                    backgroundColor: 'rgba(33, 150, 243, 0.08)',
-                    boxShadow: '0 0 12px rgba(33, 150, 243, 0.3)'
+                    backgroundColor: 'rgba(33, 150, 243, 0.12)',
+                    borderColor: 'rgba(33, 150, 243, 0.4)',
+                    boxShadow: '0 4px 20px rgba(33, 150, 243, 0.3)'
                 };
             case 'success':
                 return {
                     ...baseStyle,
-                    backgroundColor: 'rgba(76, 175, 80, 0.08)',
-                    border: '1px solid rgba(76, 175, 80, 0.3)'
+                    backgroundColor: 'rgba(76, 175, 80, 0.12)',
+                    borderColor: 'rgba(76, 175, 80, 0.4)',
+                    boxShadow: '0 2px 12px rgba(76, 175, 80, 0.2)'
                 };
             case 'error':
                 return {
                     ...baseStyle,
-                    backgroundColor: 'rgba(244, 67, 54, 0.08)',
-                    border: '1px solid rgba(244, 67, 54, 0.3)'
+                    backgroundColor: 'rgba(244, 67, 54, 0.12)',
+                    borderColor: 'rgba(244, 67, 54, 0.4)',
+                    boxShadow: '0 2px 12px rgba(244, 67, 54, 0.2)'
                 };
             default: // idle
                 return {
                     ...baseStyle,
-                    backgroundColor: 'rgba(0, 0, 0, 0.02)'
+                    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
                 };
         }
     };
@@ -331,6 +514,13 @@ const ScriptCard: React.FC<ScriptCardProps> = ({ script, isRunning, status, exec
         return '#999';
     };
 
+    const getIconColor = (): string => {
+        if (status === 'success') return '#4caf50';
+        if (status === 'error') return '#f44336';
+        if (status === 'running') return '#2196f3';
+        return '#6366f1';
+    };
+
     const handleMouseEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
         if (!isRunning) {
             e.currentTarget.style.transform = 'scale(1.08) translateY(-2px)';
@@ -354,80 +544,82 @@ const ScriptCard: React.FC<ScriptCardProps> = ({ script, isRunning, status, exec
         }
     }, [isRunning, status]);
     return (
-        <div className='verticalSection verticalSection-extrabottompadding' style={{ marginBottom: '2em' }}>
+        <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>
             <style>
                 {`
-                    @keyframes pulse {
-                        0%, 100% {
-                            transform: scale(1);
-                            opacity: 1;
-                        }
-                        50% {
-                            transform: scale(1.02);
-                            opacity: 0.9;
-                        }
+                    @keyframes pulse-glow {
+                        0%, 100% { box-shadow: 0 0 20px rgba(33, 150, 243, 0.4); }
+                        50% { box-shadow: 0 0 30px rgba(33, 150, 243, 0.6); }
                     }
                     
                     @keyframes spin {
-                        from {
-                            transform: rotate(0deg);
-                        }
-                        to {
-                            transform: rotate(360deg);
-                        }
+                        from { transform: rotate(0deg); }
+                        to { transform: rotate(360deg); }
                     }
                     
                     @keyframes shimmer {
-                        0% {
-                            background-position: -200% center;
-                        }
-                        100% {
-                            background-position: 200% center;
-                        }
+                        0% { background-position: -200% center; }
+                        100% { background-position: 200% center; }
                     }
                     
                     @keyframes success-pop {
-                        0% {
-                            transform: scale(1);
-                        }
-                        50% {
-                            transform: scale(1.1);
-                        }
-                        100% {
-                            transform: scale(1);
-                        }
+                        0% { transform: scale(1); }
+                        50% { transform: scale(1.05); }
+                        100% { transform: scale(1); }
                     }
                     
                     @keyframes error-shake {
-                        0%, 100% {
-                            transform: translateX(0);
-                        }
-                        25% {
-                            transform: translateX(-5px);
-                        }
-                        75% {
-                            transform: translateX(5px);
-                        }
+                        0%, 100% { transform: translateX(0); }
+                        25% { transform: translateX(-8px); }
+                        75% { transform: translateX(8px); }
+                    }
+                    
+                    @keyframes slideIn {
+                        from { opacity: 0; transform: translateY(-10px); }
+                        to { opacity: 1; transform: translateY(0); }
+                    }
+                    
+                    @keyframes fadeIn {
+                        from { opacity: 0; }
+                        to { opacity: 1; }
+                    }
+                    
+                    @keyframes copied-checkmark {
+                        0% { transform: scale(0); opacity: 0; }
+                        50% { transform: scale(1.2); opacity: 1; }
+                        100% { transform: scale(1); opacity: 1; }
+                    }
+
+                    .script-card {
+                        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+                        height: 100%;
+                        display: flex;
+                        flex-direction: column;
+                    }
+                    
+                    .script-card.running {
+                        animation: pulse-glow 2s ease-in-out infinite;
+                    }
+                    
+                    .script-card.success {
+                        animation: success-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+                    }
+                    
+                    .script-card.error {
+                        animation: error-shake 0.5s cubic-bezier(0.4, 0, 0.2, 1);
                     }
                     
                     .script-run-button {
                         position: relative;
                         overflow: hidden;
+                        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                     }
                     
                     .script-run-button::before {
                         content: '';
                         position: absolute;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        bottom: 0;
-                        background: linear-gradient(
-                            90deg,
-                            transparent,
-                            rgba(255, 255, 255, 0.2),
-                            transparent
-                        );
+                        top: 0; left: 0; right: 0; bottom: 0;
+                        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
                         background-size: 200% 100%;
                         animation: shimmer 2s infinite;
                         opacity: 0;
@@ -438,62 +630,173 @@ const ScriptCard: React.FC<ScriptCardProps> = ({ script, isRunning, status, exec
                         opacity: 1;
                     }
                     
-                    .script-run-button.success {
-                        animation: success-pop 0.5s ease-out;
-                    }
-                    
-                    .script-run-button.error {
-                        animation: error-shake 0.5s ease-out;
-                    }
-                    
                     .script-run-button .material-icons {
                         transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
                     }
                     
                     .script-run-button:hover:not(:disabled) .material-icons {
-                        transform: scale(1.2) rotate(15deg);
+                        transform: scale(1.15);
                     }
                     
                     .script-run-button.running .material-icons {
-                        animation: spin 1s linear infinite;
+                        animation: spin 1.2s linear infinite;
                     }
                     
-                    .execution-time {
-                        animation: fadeIn 0.3s ease-in;
+                    .console-toolbar {
+                        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                     }
                     
-                    @keyframes fadeIn {
-                        from {
-                            opacity: 0;
-                            transform: translateY(-5px);
-                        }
-                        to {
-                            opacity: 0.8;
-                            transform: translateY(0);
-                        }
+                    .console-toolbar-button {
+                        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                        opacity: 0.85;
+                        position: relative;
+                    }
+                    
+                    .console-toolbar-button:hover {
+                        opacity: 1;
+                        transform: scale(1.05);
+                    }
+                    
+                    .console-toolbar-button.active {
+                        opacity: 1;
+                        background: rgba(99, 102, 241, 0.25) !important;
+                    }
+                    
+                    .console-toolbar-button[data-tooltip]:hover::after {
+                        content: attr(data-tooltip);
+                        position: absolute;
+                        bottom: 100%;
+                        left: 50%;
+                        transform: translateX(-50%) translateY(-8px);
+                        padding: 6px 10px;
+                        background: rgba(50, 50, 50, 0.95);
+                        color: #fff;
+                        font-size: 12px;
+                        font-weight: 500;
+                        white-space: nowrap;
+                        border-radius: 6px;
+                        pointer-events: none;
+                        z-index: 1000;
+                        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+                        animation: tooltipFade 0.15s ease-out;
+                    }
+                    
+                    .console-toolbar-button[data-tooltip]:hover::before {
+                        content: '';
+                        position: absolute;
+                        bottom: 100%;
+                        left: 50%;
+                        transform: translateX(-50%) translateY(-2px);
+                        border: 5px solid transparent;
+                        border-top-color: rgba(50, 50, 50, 0.95);
+                        pointer-events: none;
+                        z-index: 1001;
+                        animation: tooltipFade 0.15s ease-out;
+                    }
+                    
+                    /* Hide browser default tooltips */
+                    .console-toolbar-button[data-tooltip] {
+                        position: relative;
+                    }
+                    
+                    @keyframes tooltipFade {
+                        from { opacity: 0; }
+                        to { opacity: 1; }
+                    }
+                    
+                    .copied-indicator {
+                        animation: copied-checkmark 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+                    }
+
+                    .console-output {
+                        scrollbar-width: thin;
+                        scrollbar-color: rgba(255, 255, 255, 0.3) rgba(0, 0, 0, 0.2);
+                        scroll-behavior: smooth;
+                        user-select: text;
+                    }
+                    
+                    .console-line {
+                        animation: fadeIn 0.3s ease-out;
+                    }
+                    
+                    .console-output::-webkit-scrollbar {
+                        width: 8px;
+                        height: 8px;
+                    }
+                    
+                    .console-output::-webkit-scrollbar-track {
+                        background: rgba(0, 0, 0, 0.2);
+                        border-radius: 4px;
+                    }
+                    
+                    .console-output::-webkit-scrollbar-thumb {
+                        background: rgba(255, 255, 255, 0.3);
+                        border-radius: 4px;
+                    }
+                    
+                    .console-output::-webkit-scrollbar-thumb:hover {
+                        background: rgba(255, 255, 255, 0.5);
                     }
                 `}
             </style>
-            <div className='paperList' style={getCardStyle()}>
+            <div className={`script-card paperList ${status}`} style={{
+                ...getCardStyle(),
+                width: '100%',
+                maxWidth: '100%',
+                overflow: 'hidden'
+            }}>
+                {/* Header Section */}
                 <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: '1em'
+                    alignItems: 'flex-start',
+                    gap: '1em',
+                    marginBottom: output.length > 0 ? '1.25em' : '0'
                 }}>
-                    <div style={{ flex: 1 }}>
+                    <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
                         <h3 style={{
                             margin: '0 0 0.5em 0',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '0.5em'
+                            gap: '0.5em',
+                            fontSize: '1.1em',
+                            fontWeight: '600',
+                            userSelect: 'none',
+                            cursor: 'default'
                         }}>
-                            <span className='material-icons' style={{ fontSize: '1.2em' }}>code</span>
-                            {script.metadata.name}
+                            <span className='material-icons' style={{
+                                fontSize: '1.3em',
+                                color: getIconColor()
+                            }}>
+                                {status === 'running' ? 'pending' : 'code'}
+                            </span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {script.metadata.name}
+                            </span>
                         </h3>
-                        <p style={{ margin: 0, color: '#999', fontSize: '0.9em' }}>{script.metadata.description}</p>
+                        <p style={{
+                            margin: 0,
+                            color: '#999',
+                            fontSize: '0.875em',
+                            lineHeight: '1.5',
+                            userSelect: 'none',
+                            cursor: 'default',
+                            wordWrap: 'break-word',
+                            overflowWrap: 'break-word'
+                        }}>
+                            {script.metadata.description}
+                        </p>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25em', marginLeft: '1em' }}>
+
+                    {/* Run Button Section - Fixed Height to Prevent Teleporting */}
+                    <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-end',
+                        gap: '0.5em',
+                        minHeight: '70px',
+                        justifyContent: 'flex-start'
+                    }}>
                         <button
                             type='button'
                             onClick={handleRun}
@@ -503,69 +806,274 @@ const ScriptCard: React.FC<ScriptCardProps> = ({ script, isRunning, status, exec
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '0.5em',
-                                padding: '0.75em 1.5em',
+                                padding: '0.7em 1.25em',
                                 fontSize: '0.95em',
                                 fontWeight: '600',
                                 border: 'none',
-                                borderRadius: '24px',
+                                borderRadius: '20px',
                                 cursor: isRunning ? 'not-allowed' : 'pointer',
-                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                transform: 'scale(1)',
+                                whiteSpace: 'nowrap',
+                                userSelect: 'none',
                                 ...getButtonStyle()
                             }}
                             onMouseEnter={handleMouseEnter}
                             onMouseLeave={handleMouseLeave}
                         >
-                            <span className='material-icons' style={{ fontSize: '1.2em' }}>
+                            <span className='material-icons' style={{ fontSize: '1.1em' }}>
                                 {getButtonIcon()}
                             </span>
-                            <span>{isRunning ? 'Running' : 'Run Script'}</span>
+                            <span>{isRunning ? 'Running...' : 'Run'}</span>
                         </button>
-                        {executionTime !== undefined && !isRunning && (
-                            <span className='execution-time' style={{
-                                fontSize: '0.75em',
-                                color: getExecutionTimeColor(),
-                                fontWeight: '600',
-                                opacity: 0.8,
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.25em'
-                            }}>
-                                <span className='material-icons' style={{ fontSize: '1em' }}>schedule</span>
-                                {executionTime}ms
-                            </span>
-                        )}
+
+                        {/* Execution Time - Always Takes Space */}
+                        <div style={{
+                            height: '20px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'flex-end'
+                        }}>
+                            {executionTime !== undefined && !isRunning && (
+                                <span style={{
+                                    fontSize: '0.75em',
+                                    color: getExecutionTimeColor(),
+                                    fontWeight: '600',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.25em',
+                                    animation: 'slideIn 0.3s ease-out',
+                                    userSelect: 'none',
+                                    cursor: 'default'
+                                }}>
+                                    <span className='material-icons' style={{ fontSize: '1em' }}>schedule</span>
+                                    {executionTime}ms
+                                </span>
+                            )}
+                        </div>
                     </div>
                 </div>
 
+                {/* Console Output Section */}
                 {output.length > 0 && (
-                    <div
-                        ref={setConsoleRef}
-                        className='paperList'
-                        style={{
-                            padding: '1em',
-                            backgroundColor: '#1a1a1a',
-                            color: '#fff',
-                            fontFamily: 'Consolas, Monaco, "Courier New", monospace',
-                            fontSize: '0.875rem',
-                            maxHeight: '400px',
-                            overflowY: 'auto',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                            border: '1px solid rgba(255, 255, 255, 0.2)',
-                            borderRadius: '4px',
-                            marginTop: '1em',
-                            boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.3)'
-                        }}
-                    >
-                        {output.map((entry) => (
-                            <div key={entry.id} style={{ marginBottom: '0.25em' }}>
-                                <span style={{ color: '#888', marginRight: '0.75em' }}>{entry.timestamp}</span>
-                                <span style={{ color: getMessageColor(entry.message) }}>
-                                    {stripPrefix(entry.message)}
-                                </span>
+                    <div style={{
+                        marginTop: 'auto',
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        borderRadius: '6px',
+                        overflow: 'hidden',
+                        border: '1px solid rgba(99, 102, 241, 0.15)',
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
+                    }}>
+                        {/* Console Toolbar */}
+                        <div className='console-toolbar' style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '0.6em 1em',
+                            background: 'linear-gradient(180deg, #1a1a1a 0%, #141414 100%)',
+                            borderBottom: '1px solid rgba(99, 102, 241, 0.2)',
+                            gap: '0.5em',
+                            flexWrap: 'wrap',
+                            userSelect: 'none',
+                            width: '100%',
+                            boxSizing: 'border-box'
+                        }}>
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.4em',
+                                fontSize: '0.75em',
+                                color: '#999',
+                                fontWeight: '600',
+                                cursor: 'default',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.8px'
+                            }}>
+                                <span className='material-icons' style={{ fontSize: '1.3em', color: '#aaa' }}>terminal</span>
+                                <span style={{ color: '#aaa' }}>Console</span>
+                                <span style={{ color: '#666' }}>·</span>
+                                <span style={{ color: '#999' }}>{output.length}</span>
                             </div>
-                        ))}
+
+                            <div style={{ display: 'flex', gap: '0.35em' }}>
+                                <button
+                                    type='button'
+                                    onClick={handleCopy}
+                                    className={`console-toolbar-button ${isCopied ? 'active' : ''}`}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        padding: '0.45em',
+                                        width: '32px',
+                                        height: '32px',
+                                        fontSize: '0.8em',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        backgroundColor: isCopied ? 'rgba(76, 175, 80, 0.25)' : 'rgba(255, 255, 255, 0.08)',
+                                        color: isCopied ? '#4caf50' : '#ddd',
+                                        transition: 'all 0.2s',
+                                        userSelect: 'none',
+                                        flexShrink: 0
+                                    }}
+                                    data-tooltip={isCopied ? 'Copied!' : 'Copy output'}
+                                    aria-label='Copy output'
+                                >
+                                    <span className={`material-icons ${isCopied ? 'copied-indicator' : ''}`} style={{ fontSize: '1.2em' }}>
+                                        {isCopied ? 'check' : 'content_copy'}
+                                    </span>
+                                </button>
+
+                                <button
+                                    type='button'
+                                    onClick={handleClear}
+                                    className='console-toolbar-button'
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        padding: '0.45em',
+                                        width: '32px',
+                                        height: '32px',
+                                        fontSize: '0.8em',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                                        color: '#ddd',
+                                        flexShrink: 0
+                                    }}
+                                    data-tooltip='Clear console'
+                                    aria-label='Clear console'
+                                >
+                                    <span className='material-icons' style={{ fontSize: '1.2em' }}>
+                                        delete_sweep
+                                    </span>
+                                </button>
+
+                                <div style={{ width: '1px', height: '24px', backgroundColor: 'rgba(255, 255, 255, 0.1)', margin: '0 0.25em' }} />
+
+                                <button
+                                    type='button'
+                                    onClick={handleToggleTimestamp}
+                                    className={`console-toolbar-button ${settings.showTimestamp ? 'active' : ''}`}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        padding: '0.45em',
+                                        width: '32px',
+                                        height: '32px',
+                                        fontSize: '0.8em',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                                        color: '#ddd',
+                                        flexShrink: 0
+                                    }}
+                                    data-tooltip={settings.showTimestamp ? 'Hide timestamps' : 'Show timestamps'}
+                                    aria-label={settings.showTimestamp ? 'Hide timestamps' : 'Show timestamps'}
+                                >
+                                    <span className='material-icons' style={{ fontSize: '1.2em' }}>
+                                        schedule
+                                    </span>
+                                </button>
+
+                                <button
+                                    type='button'
+                                    onClick={handleToggleWordWrap}
+                                    className={`console-toolbar-button ${settings.wordWrap ? 'active' : ''}`}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        padding: '0.45em',
+                                        width: '32px',
+                                        height: '32px',
+                                        fontSize: '0.8em',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                                        color: '#ddd',
+                                        flexShrink: 0
+                                    }}
+                                    data-tooltip={settings.wordWrap ? 'Disable word wrap' : 'Enable word wrap'}
+                                    aria-label={settings.wordWrap ? 'Disable word wrap' : 'Enable word wrap'}
+                                >
+                                    <span className='material-icons' style={{ fontSize: '1.2em' }}>wrap_text</span>
+                                </button>
+
+                                <button
+                                    type='button'
+                                    onClick={handleToggleColoredOutput}
+                                    className={`console-toolbar-button ${settings.coloredOutput ? 'active' : ''}`}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        padding: '0.45em',
+                                        width: '32px',
+                                        height: '32px',
+                                        fontSize: '0.8em',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                                        color: '#ddd',
+                                        flexShrink: 0
+                                    }}
+                                    data-tooltip={settings.coloredOutput ? 'Disable colors' : 'Enable colors'}
+                                    aria-label={settings.coloredOutput ? 'Disable colors' : 'Enable colors'}
+                                >
+                                    <span className='material-icons' style={{ fontSize: '1.2em' }}>palette</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Console Output */}
+                        <div
+                            ref={setConsoleRef}
+                            className='console-output'
+                            style={{
+                                padding: '1em 1.25em',
+                                backgroundColor: '#1a1a1a',
+                                color: '#fff',
+                                fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                                fontSize: '0.85em',
+                                maxHeight: '400px',
+                                minHeight: '150px',
+                                overflowY: 'auto',
+                                overflowX: 'auto',
+                                whiteSpace: settings.wordWrap ? 'pre-wrap' : 'pre',
+                                wordBreak: settings.wordWrap ? 'break-word' : 'normal',
+                                borderTop: '1px solid rgba(99, 102, 241, 0.1)',
+                                lineHeight: '1.6',
+                                width: '100%',
+                                boxSizing: 'border-box'
+                            }}
+                        >
+                            {output.map((entry) => (
+                                <div key={entry.id} className='console-line' style={{
+                                    marginBottom: '0.4em'
+                                }}>
+                                    {settings.showTimestamp && (
+                                        <span style={{
+                                            color: '#666',
+                                            marginRight: '0.75em',
+                                            fontSize: '0.9em',
+                                            userSelect: 'none'
+                                        }}>
+                                            {entry.timestamp}
+                                        </span>
+                                    )}
+                                    <span style={{ color: settings.coloredOutput ? getMessageColor(entry.message) : '#e0e0e0' }}>
+                                        {stripPrefix(entry.message)}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
             </div>
