@@ -1,6 +1,9 @@
 
 import ArrowDropDown from '@mui/icons-material/ArrowDropDown';
+import ViewList from '@mui/icons-material/ViewList';
 import Button from '@mui/material/Button/Button';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
 import Menu from '@mui/material/Menu/Menu';
 import MenuItem from '@mui/material/MenuItem/MenuItem';
 import React, { FC, useCallback, useState } from 'react';
@@ -12,7 +15,11 @@ import globalize from 'lib/globalize';
 
 const LIBRARY_VIEW_MENU_ID = 'library-view-menu';
 
-const LibraryViewMenu: FC = () => {
+interface LibraryViewMenuProps {
+    isCompact?: boolean;
+}
+
+const LibraryViewMenu: FC<LibraryViewMenuProps> = ({ isCompact = false }) => {
     const location = useLocation();
     const [ searchParams, setSearchParams ] = useSearchParams();
     const { activeTab } = useCurrentTab();
@@ -35,17 +42,31 @@ const LibraryViewMenu: FC = () => {
 
     return (
         <>
-            <Button
-                variant='text'
-                size='large'
-                color='inherit'
-                endIcon={<ArrowDropDown />}
-                aria-controls={LIBRARY_VIEW_MENU_ID}
-                aria-haspopup='true'
-                onClick={onMenuButtonClick}
-            >
-                {globalize.translate(currentTab.label)}
-            </Button>
+            {isCompact ? (
+                <Tooltip title={globalize.translate(currentTab.label)}>
+                    <IconButton
+                        size='large'
+                        color='inherit'
+                        aria-controls={LIBRARY_VIEW_MENU_ID}
+                        aria-haspopup='true'
+                        onClick={onMenuButtonClick}
+                    >
+                        <ViewList />
+                    </IconButton>
+                </Tooltip>
+            ) : (
+                <Button
+                    variant='text'
+                    size='large'
+                    color='inherit'
+                    endIcon={<ArrowDropDown />}
+                    aria-controls={LIBRARY_VIEW_MENU_ID}
+                    aria-haspopup='true'
+                    onClick={onMenuButtonClick}
+                >
+                    {globalize.translate(currentTab.label)}
+                </Button>
+            )}
 
             <Menu
                 anchorEl={menuAnchorEl}

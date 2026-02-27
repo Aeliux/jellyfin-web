@@ -80,6 +80,7 @@ const ItemsView: FC<ItemsViewProps> = ({
             getDefaultLibraryViewSettings(viewType)
         );
     const isSmallScreen = useMediaQuery((t: Theme) => t.breakpoints.up('sm'));
+    const isExtraSmallScreen = useMediaQuery((t: Theme) => t.breakpoints.down('sm'));
 
     const { __legacyApiClient__ } = useApi();
     const {
@@ -241,22 +242,22 @@ const ItemsView: FC<ItemsViewProps> = ({
                 sx={{
                     display: 'flex',
                     flexWrap: 'wrap',
-                    alignItems: 'center'
+                    alignItems: 'center',
+                    gap: 1
                 }}
             >
-                <Box
-                    sx={{ marginRight: 1 }}
-                >
-                    <LibraryViewMenu />
-                </Box>
+                {/* Hide LibraryViewMenu on small screens as it's now in the header */}
+                {!isExtraSmallScreen && (
+                    <Box>
+                        <LibraryViewMenu />
+                    </Box>
+                )}
 
+                {/* Filter, Sort, View Settings group - stays on left */}
                 <Box
                     sx={{
-                        flexGrow: {
-                            xs: 1,
-                            sm: 0
-                        },
-                        marginRight: 1
+                        flexGrow: isExtraSmallScreen ? 0 : 1,
+                        order: isExtraSmallScreen ? 1 : 0
                     }}
                 >
                     <ButtonGroup
@@ -292,14 +293,13 @@ const ItemsView: FC<ItemsViewProps> = ({
                     </ButtonGroup>
                 </Box>
 
+                {/* Play, Shuffle, Queue group - moves to right on small screens */}
                 <Box
                     sx={{
                         display: 'flex',
-                        flexGrow: {
-                            xs: 1,
-                            sm: 0
-                        },
-                        justifyContent: 'flex-end'
+                        flexGrow: isExtraSmallScreen ? 1 : 0,
+                        justifyContent: 'flex-end',
+                        order: isExtraSmallScreen ? 2 : 0
                     }}
                 >
                     {!isPending && (
@@ -345,6 +345,7 @@ const ItemsView: FC<ItemsViewProps> = ({
                     )}
                 </Box>
 
+                {/* Pagination - takes full width on small screens */}
                 <Box
                     sx={{
                         display: 'flex',
@@ -357,7 +358,8 @@ const ItemsView: FC<ItemsViewProps> = ({
                         marginTop: {
                             xs: 0.5,
                             sm: 0
-                        }
+                        },
+                        order: 3
                     }}
                 >
                     {!isPending && isPaginationEnabled && (
