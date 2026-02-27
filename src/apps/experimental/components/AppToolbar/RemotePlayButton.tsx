@@ -55,6 +55,7 @@ const RemotePlayButton = () => {
         <>
             {(playerInfo && !playerInfo.isLocalPlayer) ? (
                 <Box
+                    className='headerCastButton'
                     sx={{
                         alignSelf: 'center'
                     }}
@@ -81,6 +82,7 @@ const RemotePlayButton = () => {
             ) : (
                 <Tooltip title={globalize.translate('ButtonCast')}>
                     <IconButton
+                        className='headerCastButton'
                         size='large'
                         aria-label={globalize.translate('ButtonCast')}
                         aria-controls={ID}

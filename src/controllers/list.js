@@ -633,6 +633,11 @@ class ItemsView {
             self.scroller = view.querySelector('.scrollFrameY');
             const alphaPickerElement = self.alphaPickerElement;
 
+            // Alpha picker is disabled for video pages (element removed from HTML)
+            if (!alphaPickerElement) {
+                return;
+            }
+
             alphaPickerElement.classList.add('alphaPicker-fixed-right');
             alphaPickerElement.classList.add('focuscontainer-right');
             self.itemsContainer.parentNode.classList.add('padded-right-withalphapicker');

@@ -13,7 +13,8 @@ const moviesTabContent: LibraryTabContent = {
     collectionType: CollectionType.Movies,
     isBtnPlayAllEnabled: true,
     isBtnShuffleEnabled: true,
-    itemType: [BaseItemKind.Movie]
+    itemType: [BaseItemKind.Movie],
+    isAlphabetPickerEnabled: false
 };
 
 const collectionsTabContent: LibraryTabContent = {
@@ -22,25 +23,29 @@ const collectionsTabContent: LibraryTabContent = {
     isBtnFilterEnabled: false,
     isBtnNewCollectionEnabled: true,
     itemType: [BaseItemKind.BoxSet],
-    noItemsMessage: 'MessageNoCollectionsAvailable'
+    noItemsMessage: 'MessageNoCollectionsAvailable',
+    isAlphabetPickerEnabled: false
 };
 
 const favoritesTabContent: LibraryTabContent = {
     viewType: LibraryTab.Favorites,
     collectionType: CollectionType.Movies,
-    itemType: [BaseItemKind.Movie]
+    itemType: [BaseItemKind.Movie],
+    isAlphabetPickerEnabled: false
 };
 
 const suggestionsTabContent: LibraryTabContent = {
     viewType: LibraryTab.Suggestions,
     collectionType: CollectionType.Movies,
-    sectionsView: MovieSuggestionsSectionsView
+    sectionsView: MovieSuggestionsSectionsView,
+    isAlphabetPickerEnabled: false
 };
 
 const genresTabContent: LibraryTabContent = {
     viewType: LibraryTab.Genres,
     collectionType: CollectionType.Movies,
-    itemType: [BaseItemKind.Movie]
+    itemType: [BaseItemKind.Movie],
+    isAlphabetPickerEnabled: false
 };
 
 const moviesTabMapping: LibraryTabMapping = {

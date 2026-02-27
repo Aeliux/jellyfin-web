@@ -38,6 +38,7 @@ const SyncPlayButton = () => {
         <>
             <Tooltip title={globalize.translate('ButtonSyncPlay')}>
                 <IconButton
+                    className='headerSyncButton'
                     size='large'
                     aria-label={globalize.translate('ButtonSyncPlay')}
                     aria-controls={ID}

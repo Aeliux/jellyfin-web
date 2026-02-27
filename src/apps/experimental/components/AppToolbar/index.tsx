@@ -1,15 +1,19 @@
 import Stack from '@mui/material/Stack';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import type { Theme } from '@mui/material/styles';
 import React, { type FC } from 'react';
 import { useLocation } from 'react-router-dom';
 
 import { appRouter, PUBLIC_PATHS } from 'components/router/appRouter';
 import AppToolbar from 'components/toolbar/AppToolbar';
 import ServerButton from 'components/toolbar/ServerButton';
+import { LibraryRoutes } from 'apps/experimental/features/libraries/constants/libraryRoutes';
 
 import RemotePlayButton from './RemotePlayButton';
 import SyncPlayButton from './SyncPlayButton';
 import SearchButton from './SearchButton';
 import UserViewNav from './userViews/UserViewNav';
+import LibraryViewMenu from '../library/LibraryViewMenu';
 
 interface AppToolbarProps {
     isDrawerAvailable: boolean
@@ -23,6 +27,7 @@ const ExperimentalAppToolbar: FC<AppToolbarProps> = ({
     onDrawerButtonClick
 }) => {
     const location = useLocation();
+    const isSmallScreen = useMediaQuery((t: Theme) => t.breakpoints.down('sm'));
 
     // The video osd does not show the standard toolbar
     if (location.pathname === '/video') return null;
@@ -32,11 +37,15 @@ const ExperimentalAppToolbar: FC<AppToolbarProps> = ({
 
     // Check if the current path is a public path to hide user content
     const isPublicPath = PUBLIC_PATHS.includes(location.pathname);
+    
+    // Check if current path is a library route to show LibraryViewMenu
+    const isLibraryRoute = LibraryRoutes.some(({ path }) => path === location.pathname);
 
     return (
         <AppToolbar
             buttons={!isPublicPath && (
                 <>
+                    {isSmallScreen && isLibraryRoute && <LibraryViewMenu isCompact />}
                     <SyncPlayButton />
                     <RemotePlayButton />
                     <SearchButton />

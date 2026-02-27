@@ -12,7 +12,8 @@ const photosTabContent: LibraryTabContent = {
     collectionType: CollectionType.Homevideos,
     isBtnPlayAllEnabled: true,
     isBtnShuffleEnabled: true,
-    itemType: [BaseItemKind.Photo]
+    itemType: [BaseItemKind.Photo],
+    isAlphabetPickerEnabled: false
 };
 
 const photoAlbumsTabContent: LibraryTabContent = {
@@ -20,7 +21,8 @@ const photoAlbumsTabContent: LibraryTabContent = {
     collectionType: CollectionType.Homevideos,
     isBtnPlayAllEnabled: true,
     isBtnShuffleEnabled: true,
-    itemType: [BaseItemKind.PhotoAlbum]
+    itemType: [BaseItemKind.PhotoAlbum],
+    isAlphabetPickerEnabled: false
 };
 
 const videosTabContent: LibraryTabContent = {
@@ -28,7 +30,8 @@ const videosTabContent: LibraryTabContent = {
     collectionType: CollectionType.Homevideos,
     isBtnPlayAllEnabled: true,
     isBtnShuffleEnabled: true,
-    itemType: [BaseItemKind.Video]
+    itemType: [BaseItemKind.Video],
+    isAlphabetPickerEnabled: false
 };
 
 const homevideosTabMapping: LibraryTabMapping = {

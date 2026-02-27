@@ -17,6 +17,11 @@
     [dir="rtl"] & {
         left: 0;
     }
+
+    /* Hide scroll buttons on small screens (sm breakpoint = 600px) */
+    @media (max-width: 600px) {
+        display: none !important;
+    }
 }
 
 .emby-scrollbuttons-button > .material-icons {
