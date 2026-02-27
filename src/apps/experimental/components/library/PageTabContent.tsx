@@ -20,7 +20,15 @@ const PageTabContent: FC<PageTabContentProps> = ({ parentId, currentTab }) => {
     if (currentTab.viewType === LibraryTab.Suggestions) {
         return (
             <>
-                <Box className='padded-top padded-left padded-right padded-bottom'>
+                <Box 
+                    className='padded-top padded-left padded-right padded-bottom'
+                    sx={{
+                        display: {
+                            xs: 'none',
+                            sm: 'block'
+                        }
+                    }}
+                >
                     <LibraryViewMenu />
                 </Box>
 
@@ -40,7 +48,15 @@ const PageTabContent: FC<PageTabContentProps> = ({ parentId, currentTab }) => {
     if (currentTab.viewType === LibraryTab.Programs || currentTab.viewType === LibraryTab.Recordings || currentTab.viewType === LibraryTab.Schedule) {
         return (
             <>
-                <Box className='padded-top padded-left padded-right padded-bottom'>
+                <Box 
+                    className='padded-top padded-left padded-right padded-bottom'
+                    sx={{
+                        display: {
+                            xs: 'none',
+                            sm: 'block'
+                        }
+                    }}
+                >
                     <LibraryViewMenu />
                 </Box>
 
@@ -58,7 +74,15 @@ const PageTabContent: FC<PageTabContentProps> = ({ parentId, currentTab }) => {
     if (currentTab.viewType === LibraryTab.Upcoming) {
         return (
             <>
-                <Box className='padded-top padded-left padded-right padded-bottom'>
+                <Box 
+                    className='padded-top padded-left padded-right padded-bottom'
+                    sx={{
+                        display: {
+                            xs: 'none',
+                            sm: 'block'
+                        }
+                    }}
+                >
                     <LibraryViewMenu />
                 </Box>
 
@@ -70,7 +94,15 @@ const PageTabContent: FC<PageTabContentProps> = ({ parentId, currentTab }) => {
     if (currentTab.viewType === LibraryTab.Genres) {
         return (
             <>
-                <Box className='padded-top padded-left padded-right padded-bottom'>
+                <Box 
+                    className='padded-top padded-left padded-right padded-bottom'
+                    sx={{
+                        display: {
+                            xs: 'none',
+                            sm: 'block'
+                        }
+                    }}
+                >
                     <LibraryViewMenu />
                 </Box>
 
@@ -90,7 +122,11 @@ const PageTabContent: FC<PageTabContentProps> = ({ parentId, currentTab }) => {
                     className='padded-top padded-left padded-right padded-bottom'
                     sx={{
                         position: 'relative',
-                        zIndex: 2
+                        zIndex: 2,
+                        display: {
+                            xs: 'none',
+                            sm: 'block'
+                        }
                     }}
                 >
                     <LibraryViewMenu />

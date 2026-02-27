@@ -263,6 +263,17 @@ const ItemsView: FC<ItemsViewProps> = ({
                     <ButtonGroup
                         color='inherit'
                         variant='text'
+                        disableElevation
+                        sx={{
+                            '& .MuiButtonGroup-grouped': {
+                                border: 0,
+                                borderLeft: 0,
+                                borderRight: 0,
+                                '&:not(:last-of-type)': {
+                                    borderRight: 0
+                                }
+                            }
+                        }}
                     >
                         {isBtnFilterEnabled && (
                             <FilterButton
@@ -306,6 +317,7 @@ const ItemsView: FC<ItemsViewProps> = ({
                         <>
                             <ButtonGroup
                                 variant='contained'
+                                disableElevation
                             >
                                 {isBtnPlayAllEnabled && (
                                     <PlayAllButton
