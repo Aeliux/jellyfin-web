@@ -13,7 +13,8 @@ const moviesTabContent: LibraryTabContent = {
     collectionType: CollectionType.Movies,
     isBtnPlayAllEnabled: true,
     isBtnShuffleEnabled: true,
-    itemType: [BaseItemKind.Movie]
+    itemType: [BaseItemKind.Movie],
+    isAlphabetPickerEnabled: false
 };
 
 const collectionsTabContent: LibraryTabContent = {
@@ -22,7 +23,8 @@ const collectionsTabContent: LibraryTabContent = {
     isBtnFilterEnabled: false,
     isBtnNewCollectionEnabled: true,
     itemType: [BaseItemKind.BoxSet],
-    noItemsMessage: 'MessageNoCollectionsAvailable'
+    noItemsMessage: 'MessageNoCollectionsAvailable',
+    isAlphabetPickerEnabled: false
 };
 
 const favoritesTabContent: LibraryTabContent = {

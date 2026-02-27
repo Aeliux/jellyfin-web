@@ -20,7 +20,8 @@ const seriesTabContent: LibraryTabContent = {
     viewType: LibraryTab.Series,
     itemType: [BaseItemKind.Series],
     collectionType: CollectionType.Tvshows,
-    isBtnShuffleEnabled: true
+    isBtnShuffleEnabled: true,
+    isAlphabetPickerEnabled: false
 };
 
 const networksTabContent: LibraryTabContent = {

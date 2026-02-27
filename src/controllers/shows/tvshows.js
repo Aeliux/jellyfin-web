@@ -217,30 +217,8 @@ export default function (view, params, tabContent) {
     };
 
     const initPage = (tabElement) => {
-        const alphaPickerElement = tabElement.querySelector('.alphaPicker');
+        // Alpha picker is disabled for video pages
         const itemsContainer = tabElement.querySelector('.itemsContainer');
-
-        alphaPickerElement.addEventListener('alphavaluechanged', function (e) {
-            const newValue = e.detail.value;
-            const query = getQuery();
-            if (newValue === '#') {
-                query.NameLessThan = 'A';
-                delete query.NameStartsWith;
-            } else {
-                query.NameStartsWith = newValue;
-                delete query.NameLessThan;
-            }
-            query.StartIndex = 0;
-            reloadItems(tabElement);
-        });
-        this.alphaPicker = new AlphaPicker({
-            element: alphaPickerElement,
-            valueChangeEvent: 'click'
-        });
-
-        tabElement.querySelector('.alphaPicker').classList.add('alphabetPicker-right');
-        alphaPickerElement.classList.add('alphaPicker-fixed-right');
-        itemsContainer.classList.add('padded-right-withalphapicker');
 
         tabElement.querySelector('.btnFilter').addEventListener('click', () => {
             this.showFilterMenu();
@@ -299,7 +277,7 @@ export default function (view, params, tabContent) {
 
     this.renderTab = () => {
         reloadItems(tabContent);
-        this.alphaPicker?.updateControls(getQuery());
+        // Alpha picker is disabled for video pages
     };
 }
 

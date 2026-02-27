@@ -185,30 +185,7 @@ export default function (view, params, tabContent, options) {
         itemsContainer.fetchData = fetchData;
         itemsContainer.getItemsHtml = getItemsHtml;
         itemsContainer.afterRefresh = afterRefresh;
-        const alphaPickerElement = tabElement.querySelector('.alphaPicker');
-
-        if (alphaPickerElement) {
-            alphaPickerElement.addEventListener('alphavaluechanged', function (e) {
-                const newValue = e.detail.value;
-                if (newValue === '#') {
-                    query.NameLessThan = 'A';
-                    delete query.NameStartsWith;
-                } else {
-                    query.NameStartsWith = newValue;
-                    delete query.NameLessThan;
-                }
-                query.StartIndex = 0;
-                itemsContainer.refreshItems();
-            });
-            this.alphaPicker = new AlphaPicker({
-                element: alphaPickerElement,
-                valueChangeEvent: 'click'
-            });
-
-            tabElement.querySelector('.alphaPicker').classList.add('alphabetPicker-right');
-            alphaPickerElement.classList.add('alphaPicker-fixed-right');
-            itemsContainer.classList.add('padded-right-withalphapicker');
-        }
+        // Alpha picker is disabled for video pages
 
         const btnFilter = tabElement.querySelector('.btnFilter');
 
@@ -333,7 +310,7 @@ export default function (view, params, tabContent, options) {
 
     this.renderTab = () => {
         itemsContainer.refreshItems();
-        this.alphaPicker?.updateControls(query);
+        // Alpha picker is disabled for video pages
     };
 
     this.destroy = function () {
