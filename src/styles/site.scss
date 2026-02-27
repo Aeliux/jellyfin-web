@@ -152,6 +152,14 @@ form {
     }
 }
 
+/* Hide SyncPlay and Cast buttons to save header space */
+.headerSyncButton,
+.headerCastButton,
+.syncButton,
+.castButton {
+    display: none !important;
+}
+
 .drawerContent {
     /* make sure the bottom of the drawer is visible when music is playing */
     padding-bottom: 4em;
