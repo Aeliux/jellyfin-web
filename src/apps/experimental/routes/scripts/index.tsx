@@ -19,16 +19,21 @@ interface ConsoleMessage {
     id: string;
     timestamp: string;
     message: string;
-    type?: 'log' | 'input-prompt' | 'confirm-prompt' | 'input-response';
-    inputValue?: string;
+    type?: 'log';
 }
 
 interface PendingInput {
     scriptId: string;
-    messageId: string;
     prompt: string;
-    type: 'input' | 'confirm';
+    type: 'input' | 'confirm' | 'select';
+    options?: Record<string, string>; // For select type
     resolve: (value: string | boolean) => void;
+}
+
+interface ProgressState {
+    scriptId: string;
+    message: string;
+    percent: number;
 }
 
 type ScriptStatus = 'idle' | 'running' | 'success' | 'error' | 'skipped' | 'waiting';
@@ -52,6 +57,7 @@ export const Component = () => {
     const [copiedScriptId, setCopiedScriptId] = useState<string | null>(null);
     const [pendingInput, setPendingInput] = useState<PendingInput | null>(null);
     const [inputValue, setInputValue] = useState('');
+    const [progressState, setProgressState] = useState<ProgressState | null>(null);
     const consoleRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const scriptStatusOverrides = useRef<Map<string, 'skip' | 'fail'>>(new Map());
 
@@ -101,7 +107,7 @@ export const Component = () => {
         setScripts(loadedScripts);
     }, []);
 
-    const log = useCallback((scriptId: string, message: string, type?: 'log' | 'input-prompt' | 'confirm-prompt' | 'input-response') => {
+    const log = useCallback((scriptId: string, message: string) => {
         setConsoleOutput(prev => {
             const newMap = new Map(prev);
             const messages = newMap.get(scriptId) || [];
@@ -109,7 +115,7 @@ export const Component = () => {
             // Using timestamp + random for unique ID (not for security purposes)
             // eslint-disable-next-line sonarjs/pseudo-random
             const id = `${Date.now()}-${Math.random().toString(36).substring(2)}`;
-            newMap.set(scriptId, [...messages, { id, timestamp, message, type }]);
+            newMap.set(scriptId, [...messages, { id, timestamp, message, type: 'log' }]);
             return newMap;
         });
 
@@ -125,11 +131,10 @@ export const Component = () => {
         }, 10);
     }, []);
 
-    const handleUserInput = useCallback((scriptId: string, prompt: string, type: 'input' | 'confirm'): Promise<string | boolean> => {
+    const handleUserInput = useCallback((scriptId: string, prompt: string, type: 'input' | 'confirm' | 'select', options?: Record<string, string>): Promise<string | boolean> => {
         return new Promise((resolve) => {
-            const messageType = type === 'confirm' ? 'confirm-prompt' : 'input-prompt';
-            log(scriptId, prompt, messageType);
-            const messageId = `${Date.now()}-${Math.random().toString(36).substring(2)}`;
+            // Log the prompt as a normal console message
+            log(scriptId, prompt);
 
             // Set waiting status
             setScriptStatuses(prev => {
@@ -140,9 +145,9 @@ export const Component = () => {
 
             setPendingInput({
                 scriptId,
-                messageId,
                 prompt,
                 type,
+                options,
                 resolve: resolve as (value: string | boolean) => void
             });
         });
@@ -154,13 +159,13 @@ export const Component = () => {
         const { scriptId, type, resolve } = pendingInput;
         const finalValue = value !== undefined ? value : inputValue;
 
-        if (type === 'input') {
-            log(scriptId, finalValue || '(empty)', 'input-response');
+        if (type === 'input' || type === 'select') {
+            log(scriptId, `${finalValue || '(empty)'}`);
             resolve(finalValue);
         } else {
             // For confirm
             const confirmed = finalValue.toLowerCase() === 'yes';
-            log(scriptId, confirmed ? 'Yes' : 'No', 'input-response');
+            log(scriptId, `${confirmed ? 'Yes' : 'No'}`);
             resolve(confirmed);
         }
 
@@ -239,6 +244,14 @@ export const Component = () => {
             log: (message: string) => log(scriptId, message),
             input: (prompt: string) => handleUserInput(scriptId, prompt, 'input') as Promise<string>,
             confirm: (question: string) => handleUserInput(scriptId, question, 'confirm') as Promise<boolean>,
+            select: (prompt: string, options: Record<string, string>) => handleUserInput(scriptId, prompt, 'select', options) as Promise<string>,
+            progress: (message: string, percent: number) => {
+                setProgressState({
+                    scriptId,
+                    message,
+                    percent: Math.min(100, Math.max(0, percent))
+                });
+            },
             skip: (reason?: string) => {
                 scriptStatusOverrides.current.set(scriptId, 'skip');
                 if (reason) {
@@ -314,6 +327,14 @@ export const Component = () => {
             });
             setInputValue('');
 
+            // Clean up progress if this script had one
+            setProgressState(prev => {
+                if (prev?.scriptId === scriptId) {
+                    return null;
+                }
+                return prev;
+            });
+
             scriptStatusOverrides.current.delete(scriptId);
         }
     }, [api, log, handleUserInput, runningScripts, pendingInput]);
@@ -378,7 +399,7 @@ export const Component = () => {
         });
     }, []);
 
-    const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         setInputValue(e.target.value);
     }, []);
 
@@ -394,51 +415,6 @@ export const Component = () => {
     const handleConfirmNo = useCallback(() => {
         submitInput('no');
     }, [submitInput]);
-
-    // Inline input button handlers
-    const handleInlineSubmit = useCallback(() => {
-        submitInput();
-    }, [submitInput]);
-
-    const handleInlineInputSubmitEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        e.currentTarget.style.backgroundColor = 'rgba(255, 193, 7, 0.35)';
-        e.currentTarget.style.borderColor = 'rgba(255, 193, 7, 0.8)';
-    }, []);
-
-    const handleInlineInputSubmitLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        e.currentTarget.style.backgroundColor = 'rgba(255, 193, 7, 0.25)';
-        e.currentTarget.style.borderColor = 'rgba(255, 193, 7, 0.6)';
-    }, []);
-
-    const handleInlineCancelEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.12)';
-        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.35)';
-    }, []);
-
-    const handleInlineCancelLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
-        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)';
-    }, []);
-
-    const handleInlineYesEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        e.currentTarget.style.backgroundColor = 'rgba(76, 175, 80, 0.25)';
-        e.currentTarget.style.borderColor = 'rgba(76, 175, 80, 0.7)';
-    }, []);
-
-    const handleInlineYesLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        e.currentTarget.style.backgroundColor = 'rgba(76, 175, 80, 0.15)';
-        e.currentTarget.style.borderColor = 'rgba(76, 175, 80, 0.5)';
-    }, []);
-
-    const handleInlineNoEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        e.currentTarget.style.backgroundColor = 'rgba(244, 67, 54, 0.25)';
-        e.currentTarget.style.borderColor = 'rgba(244, 67, 54, 0.7)';
-    }, []);
-
-    const handleInlineNoLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        e.currentTarget.style.backgroundColor = 'rgba(244, 67, 54, 0.15)';
-        e.currentTarget.style.borderColor = 'rgba(244, 67, 54, 0.5)';
-    }, []);
 
     // Only admins can access scripts
     if (!user?.Policy?.IsAdministrator) {
@@ -549,21 +525,14 @@ export const Component = () => {
                                             onClear={clearConsole}
                                             consoleRefs={consoleRefs}
                                             pendingInput={pendingInput}
+                                            progressState={progressState}
                                             inputValue={inputValue}
                                             onInputChange={handleInputChange}
                                             onInputKeyDown={handleInputKeyDown}
-                                            onInlineSubmit={handleInlineSubmit}
-                                            onCancelInput={cancelInput}
+                                            onSubmit={submitInput}
+                                            onCancel={cancelInput}
                                             onConfirmYes={handleConfirmYes}
                                             onConfirmNo={handleConfirmNo}
-                                            onInlineInputSubmitEnter={handleInlineInputSubmitEnter}
-                                            onInlineInputSubmitLeave={handleInlineInputSubmitLeave}
-                                            onInlineCancelEnter={handleInlineCancelEnter}
-                                            onInlineCancelLeave={handleInlineCancelLeave}
-                                            onInlineYesEnter={handleInlineYesEnter}
-                                            onInlineYesLeave={handleInlineYesLeave}
-                                            onInlineNoEnter={handleInlineNoEnter}
-                                            onInlineNoLeave={handleInlineNoLeave}
                                         />
                                     );
                                 })}
@@ -592,21 +561,14 @@ interface ScriptCardProps {
     onClear: (scriptId: string) => void;
     consoleRefs: React.MutableRefObject<Map<string, HTMLDivElement>>;
     pendingInput: PendingInput | null;
+    progressState: ProgressState | null;
     inputValue: string;
-    onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    onInputChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
     onInputKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
-    onInlineSubmit: () => void;
-    onCancelInput: () => void;
+    onSubmit: (value?: string) => void;
+    onCancel: () => void;
     onConfirmYes: () => void;
     onConfirmNo: () => void;
-    onInlineInputSubmitEnter: (e: React.MouseEvent<HTMLButtonElement>) => void;
-    onInlineInputSubmitLeave: (e: React.MouseEvent<HTMLButtonElement>) => void;
-    onInlineCancelEnter: (e: React.MouseEvent<HTMLButtonElement>) => void;
-    onInlineCancelLeave: (e: React.MouseEvent<HTMLButtonElement>) => void;
-    onInlineYesEnter: (e: React.MouseEvent<HTMLButtonElement>) => void;
-    onInlineYesLeave: (e: React.MouseEvent<HTMLButtonElement>) => void;
-    onInlineNoEnter: (e: React.MouseEvent<HTMLButtonElement>) => void;
-    onInlineNoLeave: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
 const ScriptCard: React.FC<ScriptCardProps> = ({
@@ -625,21 +587,14 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
     onClear,
     consoleRefs,
     pendingInput,
+    progressState,
     inputValue,
     onInputChange,
     onInputKeyDown,
-    onInlineSubmit,
-    onCancelInput,
+    onSubmit,
+    onCancel,
     onConfirmYes,
-    onConfirmNo,
-    onInlineInputSubmitEnter,
-    onInlineInputSubmitLeave,
-    onInlineCancelEnter,
-    onInlineCancelLeave,
-    onInlineYesEnter,
-    onInlineYesLeave,
-    onInlineNoEnter,
-    onInlineNoLeave
+    onConfirmNo
 }) => {
     const handleRun = useCallback(() => {
         onRun(script);
@@ -998,10 +953,6 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                         }
                         
                         .script-card-icon {
-                            display: none !important;
-                        }
-                        
-                        .inline-button-text {
                             display: none !important;
                         }
                     }
@@ -1421,16 +1372,10 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                                 lineHeight: '1.6',
                                 width: '100%',
                                 boxSizing: 'border-box',
-                                borderRadius: '0 0 6px 6px'
+                                borderRadius: (pendingInput?.scriptId === script.id || progressState?.scriptId === script.id) ? '0' : '0 0 6px 6px'
                             }}
                         >
                             {output.map((entry) => {
-                                const isInputPrompt = entry.type === 'input-prompt';
-                                const isConfirmPrompt = entry.type === 'confirm-prompt';
-                                const isInputResponse = entry.type === 'input-response';
-                                const isWaitingForThis = pendingInput?.scriptId === script.id
-                                    && (isInputPrompt || isConfirmPrompt);
-
                                 return (
                                     <div key={entry.id} className='console-line' style={{
                                         marginBottom: '0.4em'
@@ -1446,186 +1391,540 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
                                             </span>
                                         )}
 
-                                        {/* Regular message or prompt text */}
-                                        {!isInputResponse && (() => {
+                                        {/* Message display */}
+                                        {(() => {
                                             const msgDisplay = settings.coloredOutput ? getMessageDisplay(entry.message) : { color: '#e0e0e0', text: entry.message };
                                             return (
                                                 <span style={{
-                                                    color: msgDisplay.color,
-                                                    fontWeight: (isInputPrompt || isConfirmPrompt) ? '600' : 'normal'
+                                                    color: msgDisplay.color
                                                 }}>
-                                                    {isInputPrompt && '❓ '}
-                                                    {isConfirmPrompt && '❔ '}
                                                     {msgDisplay.text}
                                                 </span>
                                             );
                                         })()}
-
-                                        {/* Input response display */}
-                                        {isInputResponse && (
-                                            <span style={{
-                                                color: '#ffc107',
-                                                fontWeight: '600'
-                                            }}>
-                                                → {entry.message}
-                                            </span>
-                                        )}
-
-                                        {/* Inline input field - only show if this is the active input */}
-                                        {isInputPrompt && isWaitingForThis && pendingInput.type === 'input' && (
-                                            <div style={{
-                                                display: 'flex',
-                                                gap: '0.5em',
-                                                marginTop: '0.4em',
-                                                alignItems: 'center'
-                                            }}>
-                                                <input
-                                                    type='text'
-                                                    value={inputValue}
-                                                    onChange={onInputChange}
-                                                    onKeyDown={onInputKeyDown}
-                                                    style={{
-                                                        flex: 1,
-                                                        padding: '0.35em 0.6em',
-                                                        fontSize: '0.9em',
-                                                        backgroundColor: '#2a2a2a',
-                                                        border: '1px solid rgba(255, 193, 7, 0.5)',
-                                                        borderRadius: '3px',
-                                                        color: '#fff',
-                                                        outline: 'none',
-                                                        fontFamily: 'inherit',
-                                                        lineHeight: '1.4'
-                                                    }}
-                                                    placeholder='Enter value...'
-                                                />
-                                                <button
-                                                    type='button'
-                                                    onClick={onInlineSubmit}
-                                                    style={{
-                                                        padding: '0.35em 0.6em',
-                                                        fontSize: '0.9em',
-                                                        fontWeight: '600',
-                                                        backgroundColor: 'rgba(255, 193, 7, 0.25)',
-                                                        border: '1px solid rgba(255, 193, 7, 0.6)',
-                                                        borderRadius: '3px',
-                                                        color: '#ffc107',
-                                                        cursor: 'pointer',
-                                                        transition: 'all 0.2s',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        gap: '0.4em',
-                                                        lineHeight: '1.4',
-                                                        whiteSpace: 'nowrap'
-                                                    }}
-                                                    onMouseEnter={onInlineInputSubmitEnter}
-                                                    onMouseLeave={onInlineInputSubmitLeave}
-                                                    title='Submit'
-                                                >
-                                                    <span className='material-icons' style={{ fontSize: '1em', lineHeight: 1 }}>check</span>
-                                                    <span className='inline-button-text'>Submit</span>
-                                                </button>
-                                                <button
-                                                    type='button'
-                                                    onClick={onCancelInput}
-                                                    style={{
-                                                        padding: '0.35em 0.6em',
-                                                        fontSize: '0.9em',
-                                                        fontWeight: '600',
-                                                        backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                                                        border: '1px solid rgba(255, 255, 255, 0.25)',
-                                                        borderRadius: '3px',
-                                                        color: '#aaa',
-                                                        cursor: 'pointer',
-                                                        transition: 'all 0.2s',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        gap: '0.4em',
-                                                        lineHeight: '1.4',
-                                                        whiteSpace: 'nowrap'
-                                                    }}
-                                                    onMouseEnter={onInlineCancelEnter}
-                                                    onMouseLeave={onInlineCancelLeave}
-                                                    title='Cancel'
-                                                >
-                                                    <span className='material-icons' style={{ fontSize: '1em', lineHeight: 1 }}>close</span>
-                                                    <span className='inline-button-text'>Cancel</span>
-                                                </button>
-                                            </div>
-                                        )}
-
-                                        {/* Inline confirmation buttons - only show if this is the active confirmation */}
-                                        {isConfirmPrompt && isWaitingForThis && pendingInput.type === 'confirm' && (
-                                            <span style={{
-                                                display: 'inline-flex',
-                                                gap: '0.5em',
-                                                marginLeft: '0.5em',
-                                                verticalAlign: 'middle'
-                                            }}>
-                                                <button
-                                                    type='button'
-                                                    onClick={onConfirmYes}
-                                                    style={{
-                                                        padding: '0.25em 0.5em',
-                                                        fontSize: '0.9em',
-                                                        fontWeight: '500',
-                                                        backgroundColor: 'rgba(76, 175, 80, 0.15)',
-                                                        border: '1px solid rgba(76, 175, 80, 0.5)',
-                                                        borderRadius: '3px',
-                                                        color: '#4caf50',
-                                                        cursor: 'pointer',
-                                                        transition: 'all 0.15s',
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        gap: '0.35em',
-                                                        lineHeight: 1,
-                                                        whiteSpace: 'nowrap'
-                                                    }}
-                                                    onMouseEnter={onInlineYesEnter}
-                                                    onMouseLeave={onInlineYesLeave}
-                                                    title='Yes'
-                                                >
-                                                    <span className='material-icons' style={{ fontSize: '0.9em', lineHeight: 1 }}>check</span>
-                                                    <span className='inline-button-text'>Yes</span>
-                                                </button>
-                                                <button
-                                                    type='button'
-                                                    onClick={onConfirmNo}
-                                                    style={{
-                                                        padding: '0.25em 0.5em',
-                                                        fontSize: '0.9em',
-                                                        fontWeight: '500',
-                                                        backgroundColor: 'rgba(244, 67, 54, 0.15)',
-                                                        border: '1px solid rgba(244, 67, 54, 0.5)',
-                                                        borderRadius: '3px',
-                                                        color: '#f44336',
-                                                        cursor: 'pointer',
-                                                        transition: 'all 0.15s',
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        gap: '0.35em',
-                                                        lineHeight: 1,
-                                                        whiteSpace: 'nowrap'
-                                                    }}
-                                                    onMouseEnter={onInlineNoEnter}
-                                                    onMouseLeave={onInlineNoLeave}
-                                                    title='No'
-                                                >
-                                                    <span className='material-icons' style={{ fontSize: '0.9em', lineHeight: 1 }}>close</span>
-                                                    <span className='inline-button-text'>No</span>
-                                                </button>
-                                            </span>
-                                        )}
                                     </div>
                                 );
                             })}
                         </div>
+
+                        {/* Console Footer - Shows when this script is waiting for input or showing progress */}
+                        {(pendingInput?.scriptId === script.id || progressState?.scriptId === script.id) && (
+                            <ConsoleFooter
+                                pendingInput={pendingInput?.scriptId === script.id ? pendingInput : null}
+                                progressState={progressState?.scriptId === script.id ? progressState : null}
+                                inputValue={inputValue}
+                                onInputChange={onInputChange}
+                                onInputKeyDown={onInputKeyDown}
+                                onSubmit={onSubmit}
+                                onCancel={onCancel}
+                                onConfirmYes={onConfirmYes}
+                                onConfirmNo={onConfirmNo}
+                            />
+                        )}
                     </div>
                 )}
             </div>
+        </div>
+    );
+};
+
+interface ConsoleFooterProps {
+    pendingInput: PendingInput | null;
+    progressState: ProgressState | null;
+    inputValue: string;
+    onInputChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
+    onInputKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+    onSubmit: (value?: string) => void;
+    onCancel: () => void;
+    onConfirmYes: () => void;
+    onConfirmNo: () => void;
+}
+
+const ConsoleFooter: React.FC<ConsoleFooterProps> = ({
+    pendingInput,
+    progressState,
+    inputValue,
+    onInputChange,
+    onInputKeyDown,
+    onSubmit,
+    onCancel,
+    onConfirmYes,
+    onConfirmNo
+}) => {
+    // Input handlers
+    const handleInputFocus = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
+        e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.6)';
+        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+    }, []);
+
+    const handleInputBlur = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
+        e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.3)';
+        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+    }, []);
+
+    const handleSelectFocus = useCallback((e: React.FocusEvent<HTMLSelectElement>) => {
+        e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.6)';
+        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+    }, []);
+
+    const handleSelectBlur = useCallback((e: React.FocusEvent<HTMLSelectElement>) => {
+        e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.3)';
+        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+    }, []);
+
+    // Select button hover handlers
+    const handleSelectCancelEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+    }, []);
+
+    const handleSelectCancelLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+    }, []);
+
+    const handleSelectSubmitEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.transform = 'translateY(-1px)';
+        e.currentTarget.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.4)';
+    }, []);
+
+    const handleSelectSubmitLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = '0 2px 8px rgba(99, 102, 241, 0.3)';
+    }, []);
+
+    // Button hover handlers
+    const handleCancelEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+    }, []);
+
+    const handleCancelLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+    }, []);
+
+    const handleSubmitEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.transform = 'translateY(-1px)';
+        e.currentTarget.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.4)';
+    }, []);
+
+    const handleSubmitLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = '0 2px 8px rgba(99, 102, 241, 0.3)';
+    }, []);
+
+    const handleConfirmNoEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+    }, []);
+
+    const handleConfirmNoLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+    }, []);
+
+    const handleConfirmYesEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.transform = 'translateY(-1px)';
+        e.currentTarget.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.4)';
+    }, []);
+
+    const handleConfirmYesLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = '0 2px 8px rgba(99, 102, 241, 0.3)';
+    }, []);
+
+    const handleSubmitClick = useCallback(() => {
+        onSubmit();
+    }, [onSubmit]);
+
+    return (
+        <div style={{
+            backgroundColor: '#1a1a1a',
+            borderTop: '1px solid rgba(99, 102, 241, 0.15)',
+            borderRadius: '0 0 6px 6px',
+            animation: 'slideDownFooter 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            userSelect: 'none',
+            overflow: 'hidden'
+        }}>
+            <style>
+                {`
+                    @keyframes slideDownFooter {
+                        from { 
+                            opacity: 0; 
+                            max-height: 0;
+                            transform: scaleY(0);
+                            transform-origin: top;
+                        }
+                        to { 
+                            opacity: 1; 
+                            max-height: 100px;
+                            transform: scaleY(1);
+                        }
+                    }
+                `}
+            </style>
+
+            {/* Progress Bar */}
+            {progressState && (
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '1em',
+                    padding: '0.75em 1em',
+                    borderBottom: pendingInput ? '1px solid rgba(255, 255, 255, 0.1)' : 'none'
+                }}>
+                    <div style={{
+                        flex: '0 0 auto',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5em',
+                        color: '#fff',
+                        fontWeight: '600',
+                        fontSize: '0.9em',
+                        minWidth: '150px',
+                        userSelect: 'none',
+                        cursor: 'default'
+                    }}>
+                        <span className='material-icons' style={{ fontSize: '1.2em', color: '#6366f1', userSelect: 'none' }}>
+                            hourglass_empty
+                        </span>
+                        <span style={{ userSelect: 'none' }}>{progressState.message}</span>
+                    </div>
+
+                    <div style={{
+                        flex: '1 1 auto',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75em'
+                    }}>
+                        <div style={{
+                            flex: 1,
+                            height: '8px',
+                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                            borderRadius: '4px',
+                            overflow: 'hidden'
+                        }}>
+                            <div style={{
+                                height: '100%',
+                                width: `${progressState.percent}%`,
+                                background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)',
+                                borderRadius: '4px',
+                                transition: 'width 0.3s ease-out',
+                                boxShadow: '0 0 10px rgba(99, 102, 241, 0.5)'
+                            }} />
+                        </div>
+
+                        <span style={{
+                            color: '#6366f1',
+                            fontWeight: '700',
+                            fontSize: '0.9em',
+                            minWidth: '45px',
+                            textAlign: 'right',
+                            userSelect: 'none',
+                            cursor: 'default'
+                        }}>
+                            {Math.round(progressState.percent)}%
+                        </span>
+                    </div>
+                </div>
+            )}
+
+            {/* Input Footer */}
+            {pendingInput && (
+                <>
+                    {/* Input Type */}
+                    {pendingInput.type === 'input' && (
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75em',
+                            padding: '0.75em 1em'
+                        }}>
+                            <input
+                                type='text'
+                                value={inputValue}
+                                onChange={onInputChange}
+                                onKeyDown={onInputKeyDown}
+                                placeholder={pendingInput.prompt}
+                                style={{
+                                    flex: 1,
+                                    padding: '0 0.85em',
+                                    fontSize: '0.9em',
+                                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                    border: '1px solid rgba(99, 102, 241, 0.3)',
+                                    borderRadius: '6px',
+                                    color: '#fff',
+                                    outline: 'none',
+                                    fontFamily: 'inherit',
+                                    transition: 'all 0.2s',
+                                    minWidth: 0,
+                                    height: '36px'
+                                }}
+                                onFocus={handleInputFocus}
+                                onBlur={handleInputBlur}
+                            />
+
+                            <button
+                                type='button'
+                                onClick={onCancel}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '0.4em',
+                                    padding: '0 1em',
+                                    height: '36px',
+                                    fontSize: '0.85em',
+                                    fontWeight: '500',
+                                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                                    borderRadius: '6px',
+                                    color: 'rgba(255, 255, 255, 0.85)',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    whiteSpace: 'nowrap',
+                                    userSelect: 'none'
+                                }}
+                                onMouseEnter={handleCancelEnter}
+                                onMouseLeave={handleCancelLeave}
+                            >
+                                <span className='material-icons' style={{ fontSize: '1.1em', userSelect: 'none', pointerEvents: 'none' }}>close</span>
+                                <span className='footer-button-text' style={{ userSelect: 'none', pointerEvents: 'none' }}>Cancel</span>
+                            </button>
+
+                            <button
+                                type='button'
+                                onClick={handleSubmitClick}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '0.4em',
+                                    padding: '0 1.1em',
+                                    height: '36px',
+                                    fontSize: '0.85em',
+                                    fontWeight: '600',
+                                    background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    color: '#fff',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    whiteSpace: 'nowrap',
+                                    boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)',
+                                    userSelect: 'none'
+                                }}
+                                onMouseEnter={handleSubmitEnter}
+                                onMouseLeave={handleSubmitLeave}
+                            >
+                                <span className='material-icons' style={{ fontSize: '1.1em', userSelect: 'none', pointerEvents: 'none' }}>check</span>
+                                <span className='footer-button-text' style={{ userSelect: 'none', pointerEvents: 'none' }}>Submit</span>
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Select Type */}
+                    {pendingInput.type === 'select' && pendingInput.options && (
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75em',
+                            padding: '0.75em 1em'
+                        }}>
+                            <select
+                                value={inputValue}
+                                onChange={onInputChange}
+                                style={{
+                                    flex: 1,
+                                    padding: '0 0.85em',
+                                    fontSize: '0.9em',
+                                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                    border: '1px solid rgba(99, 102, 241, 0.3)',
+                                    borderRadius: '6px',
+                                    color: '#fff',
+                                    outline: 'none',
+                                    fontFamily: 'inherit',
+                                    transition: 'all 0.2s',
+                                    minWidth: 0,
+                                    cursor: 'pointer',
+                                    height: '36px'
+                                }}
+                                onFocus={handleSelectFocus}
+                                onBlur={handleSelectBlur}
+                            >
+                                <option value='' style={{ backgroundColor: '#1a1a1a' }}>-- Select an option --</option>
+                                {Object.entries(pendingInput.options).map(([key, value]) => (
+                                    <option key={value} value={value} style={{ backgroundColor: '#1a1a1a' }}>
+                                        {key}
+                                    </option>
+                                ))}
+                            </select>
+
+                            <button
+                                type='button'
+                                onClick={onCancel}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '0.4em',
+                                    padding: '0 1em',
+                                    height: '36px',
+                                    fontSize: '0.85em',
+                                    fontWeight: '500',
+                                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                                    borderRadius: '6px',
+                                    color: 'rgba(255, 255, 255, 0.85)',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    whiteSpace: 'nowrap',
+                                    userSelect: 'none'
+                                }}
+                                onMouseEnter={handleSelectCancelEnter}
+                                onMouseLeave={handleSelectCancelLeave}
+                            >
+                                <span className='material-icons' style={{ fontSize: '1.1em', userSelect: 'none', pointerEvents: 'none' }}>close</span>
+                                <span className='footer-button-text' style={{ userSelect: 'none', pointerEvents: 'none' }}>Cancel</span>
+                            </button>
+
+                            <button
+                                type='button'
+                                onClick={handleSubmitClick}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '0.4em',
+                                    padding: '0 1.1em',
+                                    height: '36px',
+                                    fontSize: '0.85em',
+                                    fontWeight: '600',
+                                    background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    color: '#fff',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    whiteSpace: 'nowrap',
+                                    boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)',
+                                    userSelect: 'none'
+                                }}
+                                onMouseEnter={handleSelectSubmitEnter}
+                                onMouseLeave={handleSelectSubmitLeave}
+                            >
+                                <span className='material-icons' style={{ fontSize: '1.1em', userSelect: 'none', pointerEvents: 'none' }}>check</span>
+                                <span className='footer-button-text' style={{ userSelect: 'none', pointerEvents: 'none' }}>Submit</span>
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Confirm Type */}
+                    {pendingInput.type === 'confirm' && (
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75em',
+                            padding: '0.75em 1em'
+                        }}>
+                            <div style={{
+                                flex: '0 1 auto',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5em',
+                                color: '#fff',
+                                fontWeight: '500',
+                                fontSize: '0.9em',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                userSelect: 'none',
+                                cursor: 'default'
+                            }} className='footer-confirm-message'>
+                                <span className='material-icons' style={{ fontSize: '1.2em', color: '#ffc107', flexShrink: 0, userSelect: 'none' }}>
+                                    help_outline
+                                </span>
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', userSelect: 'none' }}>
+                                    {pendingInput.prompt}
+                                </span>
+                            </div>
+
+                            <div style={{
+                                flex: '0 0 auto',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.75em',
+                                marginLeft: 'auto'
+                            }}>
+                                <button
+                                    type='button'
+                                    onClick={onConfirmNo}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '0.4em',
+                                        padding: '0 1em',
+                                        height: '36px',
+                                        fontSize: '0.85em',
+                                        fontWeight: '500',
+                                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                                        borderRadius: '6px',
+                                        color: 'rgba(255, 255, 255, 0.85)',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s',
+                                        whiteSpace: 'nowrap',
+                                        userSelect: 'none'
+                                    }}
+                                    onMouseEnter={handleConfirmNoEnter}
+                                    onMouseLeave={handleConfirmNoLeave}
+                                >
+                                    <span className='material-icons' style={{ fontSize: '1.1em', userSelect: 'none', pointerEvents: 'none' }}>close</span>
+                                    <span style={{ userSelect: 'none', pointerEvents: 'none' }}>No</span>
+                                </button>
+
+                                <button
+                                    type='button'
+                                    onClick={onConfirmYes}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '0.4em',
+                                        padding: '0 1.1em',
+                                        height: '36px',
+                                        fontSize: '0.85em',
+                                        fontWeight: '600',
+                                        background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        color: '#fff',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s',
+                                        whiteSpace: 'nowrap',
+                                        boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)',
+                                        userSelect: 'none'
+                                    }}
+                                    onMouseEnter={handleConfirmYesEnter}
+                                    onMouseLeave={handleConfirmYesLeave}
+                                >
+                                    <span className='material-icons' style={{ fontSize: '1.1em', userSelect: 'none', pointerEvents: 'none' }}>check</span>
+                                    <span style={{ userSelect: 'none', pointerEvents: 'none' }}>Yes</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </>
+            )}
+
+            <style>
+                {`
+                    @media (max-width: 768px) {
+                        .footer-button-text {
+                            display: none !important;
+                        }
+                        .footer-confirm-message {
+                            display: none !important;
+                        }
+                    }
+                `}
+            </style>
         </div>
     );
 };
