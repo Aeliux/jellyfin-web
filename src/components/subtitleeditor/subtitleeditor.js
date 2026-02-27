@@ -26,6 +26,25 @@ import template from './subtitleeditor.template.html';
 let currentItem;
 let hasChanges;
 
+function getSubtitleFileExtension(codec) {
+    // Map codec names to proper file extensions
+    const codecMap = {
+        'subrip': 'srt',
+        'srt': 'srt',
+        'ass': 'ass',
+        'ssa': 'ssa',
+        'vtt': 'vtt',
+        'webvtt': 'vtt',
+        'sub': 'sub',
+        'pgssub': 'sup',
+        'dvdsub': 'sub',
+        'vobsub': 'sub'
+    };
+    
+    const normalizedCodec = (codec || '').toLowerCase();
+    return codecMap[normalizedCodec] || 'vtt';
+}
+
 function downloadRemoteSubtitles(context, id) {
     const url = 'Items/' + currentItem.Id + '/RemoteSearch/Subtitles/' + id;
 
@@ -42,6 +61,74 @@ function downloadRemoteSubtitles(context, id) {
 
         focusManager.autoFocus(context);
     });
+}
+
+function downloadLocalSubtitle(subtitleStream) {
+    const apiClient = ServerConnections.getApiClient(currentItem.ServerId);
+    let subtitleUrl;
+
+    // For external URL subtitles, use the path directly
+    if (subtitleStream.IsExternalUrl && subtitleStream.DeliveryUrl) {
+        subtitleUrl = subtitleStream.DeliveryUrl;
+    } else if (subtitleStream.DeliveryUrl) {
+        // Use DeliveryUrl if available (starts with /)
+        subtitleUrl = apiClient.getUrl(subtitleStream.DeliveryUrl);
+    } else {
+        // Construct the subtitle stream URL manually
+        // Format: Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/Stream.{format}
+        const mediaSourceId = currentItem.MediaSources?.[0]?.Id || currentItem.Id;
+        const format = subtitleStream.Codec || 'vtt';
+        const url = `Videos/${currentItem.Id}/${mediaSourceId}/Subtitles/${subtitleStream.Index}/Stream.${format}`;
+        subtitleUrl = apiClient.getUrl(url);
+    }
+    
+    // Get proper file extension from codec
+    const extension = getSubtitleFileExtension(subtitleStream.Codec);
+    
+    // Extract video filename without extension from path or media source
+    let baseFilename = 'subtitle';
+    
+    // Try to get filename from MediaSources first
+    if (currentItem.MediaSources && currentItem.MediaSources.length > 0 && currentItem.MediaSources[0].Path) {
+        const mediaPath = currentItem.MediaSources[0].Path;
+        const pathParts = mediaPath.replace(/\\/g, '/').split('/');
+        const fullFilename = pathParts[pathParts.length - 1];
+        baseFilename = fullFilename.replace(/\.[^.]+$/, '');
+    } else if (currentItem.Path) {
+        // Try item Path
+        const pathParts = currentItem.Path.replace(/\\/g, '/').split('/');
+        const fullFilename = pathParts[pathParts.length - 1];
+        baseFilename = fullFilename.replace(/\.[^.]+$/, '');
+    } else if (currentItem.Name) {
+        // Fallback to item name
+        baseFilename = currentItem.Name;
+    }
+    
+    // Construct the final filename
+    const filename = `${baseFilename}.${subtitleStream.Language || 'und'}.${extension}`;
+
+    // Fetch the subtitle and create a blob URL to ensure download attribute works
+    loading.show();
+    fetch(subtitleUrl)
+        .then(response => response.blob())
+        .then(blob => {
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            // Clean up the blob URL after download
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+            loading.hide();
+            toast(globalize.translate('MessageDownloadQueued'));
+        })
+        .catch(error => {
+            loading.hide();
+            console.error('Error downloading subtitle:', error);
+            toast(globalize.translate('MessageFileReadError'));
+        });
 }
 
 function deleteLocalSubtitle(context, index) {
@@ -116,6 +203,11 @@ function fillSubtitleList(context, item) {
 
             itemHtml += '</a>';
             itemHtml += '</div>';
+
+            // Add download button for all subtitles
+            if (!layoutManager.tv) {
+                itemHtml += '<button is="paper-icon-button-light" data-index="' + s.Index + '" title="' + globalize.translate('Download') + '" class="btnDownloadSubtitle listItemButton"><span class="material-icons file_download" aria-hidden="true"></span></button>';
+            }
 
             if (!layoutManager.tv && s.Path) {
                 itemHtml += '<button is="paper-icon-button-light" data-index="' + s.Index + '" title="' + globalize.translate('Delete') + '" class="btnDelete listItemButton"><span class="material-icons delete" aria-hidden="true"></span></button>';
@@ -331,6 +423,18 @@ function onSubtitleListClick(e) {
         const index = btnDelete.getAttribute('data-index');
         const context = dom.parentWithClass(btnDelete, 'subtitleEditorDialog');
         deleteLocalSubtitle(context, index);
+        return;
+    }
+
+    const btnDownload = dom.parentWithClass(e.target, 'btnDownloadSubtitle');
+    if (btnDownload) {
+        const index = parseInt(btnDownload.getAttribute('data-index'));
+        const subtitleStream = (currentItem.MediaStreams || []).find(function (s) {
+            return s.Type === 'Subtitle' && s.Index === index;
+        });
+        if (subtitleStream) {
+            downloadLocalSubtitle(subtitleStream);
+        }
     }
 }
 
