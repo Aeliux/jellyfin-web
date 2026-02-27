@@ -34,19 +34,22 @@ const networksTabContent: LibraryTabContent = {
 };
 
 const upcomingTabContent: LibraryTabContent = {
-    viewType: LibraryTab.Upcoming
+    viewType: LibraryTab.Upcoming,
+    isAlphabetPickerEnabled: false
 };
 
 const suggestionsTabContent: LibraryTabContent = {
     viewType: LibraryTab.Suggestions,
     collectionType: CollectionType.Tvshows,
-    sectionsView: TvShowSuggestionsSectionsView
+    sectionsView: TvShowSuggestionsSectionsView,
+    isAlphabetPickerEnabled: false
 };
 
 const genresTabContent: LibraryTabContent = {
     viewType: LibraryTab.Genres,
     itemType: [BaseItemKind.Series],
-    collectionType: CollectionType.Tvshows
+    collectionType: CollectionType.Tvshows,
+    isAlphabetPickerEnabled: false
 };
 
 const tvShowsTabMapping: LibraryTabMapping = {

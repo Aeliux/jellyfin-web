@@ -30,19 +30,22 @@ const collectionsTabContent: LibraryTabContent = {
 const favoritesTabContent: LibraryTabContent = {
     viewType: LibraryTab.Favorites,
     collectionType: CollectionType.Movies,
-    itemType: [BaseItemKind.Movie]
+    itemType: [BaseItemKind.Movie],
+    isAlphabetPickerEnabled: false
 };
 
 const suggestionsTabContent: LibraryTabContent = {
     viewType: LibraryTab.Suggestions,
     collectionType: CollectionType.Movies,
-    sectionsView: MovieSuggestionsSectionsView
+    sectionsView: MovieSuggestionsSectionsView,
+    isAlphabetPickerEnabled: false
 };
 
 const genresTabContent: LibraryTabContent = {
     viewType: LibraryTab.Genres,
     collectionType: CollectionType.Movies,
-    itemType: [BaseItemKind.Movie]
+    itemType: [BaseItemKind.Movie],
+    isAlphabetPickerEnabled: false
 };
 
 const moviesTabMapping: LibraryTabMapping = {

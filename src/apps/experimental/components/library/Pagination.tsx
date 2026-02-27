@@ -36,6 +36,11 @@ const Pagination: FC<PaginationProps> = ({
         totalRecordCount;
     const showControls = limit > 0 && limit < totalRecordCount;
 
+    // Hide pagination if there's only one page
+    if (!showControls) {
+        return null;
+    }
+
     const onNextPageClick = useCallback(() => {
         const newIndex = startIndex + limit;
         setLibraryViewSettings((prevState) => ({

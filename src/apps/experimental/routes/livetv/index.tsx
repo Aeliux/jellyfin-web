@@ -17,12 +17,14 @@ const seriestimersTabContent: LibraryTabContent = {
 
 const scheduleTabContent: LibraryTabContent = {
     viewType: LibraryTab.Schedule,
-    sectionsView: ScheduleSectionsView
+    sectionsView: ScheduleSectionsView,
+    isAlphabetPickerEnabled: false
 };
 
 const recordingsTabContent: LibraryTabContent = {
     viewType: LibraryTab.Recordings,
-    sectionsView: RecordingsSectionsView
+    sectionsView: RecordingsSectionsView,
+    isAlphabetPickerEnabled: false
 };
 
 const channelsTabContent: LibraryTabContent = {
@@ -34,11 +36,13 @@ const channelsTabContent: LibraryTabContent = {
 
 const programsTabContent: LibraryTabContent = {
     viewType: LibraryTab.Programs,
-    sectionsView: ProgramSectionsView
+    sectionsView: ProgramSectionsView,
+    isAlphabetPickerEnabled: false
 };
 
 const guideTabContent: LibraryTabContent = {
-    viewType: LibraryTab.Guide
+    viewType: LibraryTab.Guide,
+    isAlphabetPickerEnabled: false
 };
 
 const liveTvTabMapping: LibraryTabMapping = {
