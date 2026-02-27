@@ -34,6 +34,21 @@ export interface ScriptContext {
     confirm: (question: string) => Promise<boolean>;
 
     /**
+     * Request user to select from a list of options
+     * @param prompt The prompt to display to the user
+     * @param options Key-value pairs where keys are displayed and values are returned
+     * @returns Promise that resolves with the value of the selected option (or empty string if cancelled)
+     */
+    select: (prompt: string, options: Record<string, string>) => Promise<string>;
+
+    /**
+     * Update progress indicator (if supported)
+     * @param message The progress message
+     * @param percent The progress percentage (0-100)
+     */
+    progress: (message: string, percent: number) => void;
+
+    /**
      * Mark the script as skipped (must be called before script exits)
      * @param reason Optional reason for skipping
      */
