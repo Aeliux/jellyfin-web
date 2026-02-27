@@ -165,10 +165,9 @@ function getCardHtml(image, apiClient, options) {
             } else {
                 html += '<button type="button" is="paper-icon-button-light" class="autoSize" disabled title="' + globalize.translate('MoveRight') + '"><span class="material-icons chevron_right" aria-hidden="true"></span></button>';
             }
-        } else if (options.imageProviders.length) {
-            html += '<button type="button" is="paper-icon-button-light" data-imagetype="' + image.ImageType + '" class="btnSearchImages autoSize" title="' + globalize.translate('Search') + '"><span class="material-icons search" aria-hidden="true"></span></button>';
         }
 
+        html += '<button type="button" is="paper-icon-button-light" data-imagetype="' + image.ImageType + '" data-index="' + (image.ImageIndex != null ? image.ImageIndex : 'null') + '" class="btnDownloadImage autoSize" title="' + globalize.translate('Download') + '"><span class="material-icons file_download" aria-hidden="true"></span></button>';
         html += '<button type="button" is="paper-icon-button-light" data-imagetype="' + image.ImageType + '" data-index="' + (image.ImageIndex != null ? image.ImageIndex : 'null') + '" class="btnDeleteImage autoSize" title="' + globalize.translate('Delete') + '"><span class="material-icons delete" aria-hidden="true"></span></button>';
         html += '</div>';
     }
@@ -207,6 +206,39 @@ function moveImage(context, apiClient, itemId, type, index, newIndex, focusConte
     }, function () {
         alert(globalize.translate('ErrorDefault'));
     });
+}
+
+function downloadImage(apiClient, itemId, type, index) {
+    const options = {
+        type: type,
+        index: index,
+        quality: 100
+    };
+
+    if (type === 'Backdrop') {
+        if (currentItem.BackdropImageTags && currentItem.BackdropImageTags[index]) {
+            options.tag = currentItem.BackdropImageTags[index];
+        }
+    } else if (type === 'Primary') {
+        options.tag = currentItem.PrimaryImageTag || (currentItem.ImageTags && currentItem.ImageTags[type]);
+    } else if (currentItem.ImageTags && currentItem.ImageTags[type]) {
+        options.tag = currentItem.ImageTags[type];
+    }
+
+    if (!options.tag) {
+        console.error('Image tag not found for type:', type, 'index:', index);
+        return;
+    }
+
+    const imageUrl = apiClient.getScaledImageUrl(itemId, options);
+
+    const link = document.createElement('a');
+    link.href = imageUrl;
+    link.download = currentItem.Name + '-' + type + (index != null ? '-' + index : '') + '.jpg';
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
 
 function renderImages(page, item, apiClient, images, imageProviders, elem) {
@@ -285,6 +317,11 @@ function showActionSheet(context, imageCard) {
         const commands = [];
 
         commands.push({
+            name: globalize.translate('Download'),
+            id: 'download'
+        });
+
+        commands.push({
             name: globalize.translate('Delete'),
             id: 'delete'
         });
@@ -319,6 +356,9 @@ function showActionSheet(context, imageCard) {
 
         }).then(function (id) {
             switch (id) {
+                case 'download':
+                    downloadImage(apiClient, itemId, type, index);
+                    break;
                 case 'delete':
                     deleteImage(context, itemId, type, index, apiClient, false);
                     break;
@@ -369,16 +409,20 @@ function initEditor(context, options) {
         });
     });
 
-    addListeners(context, 'btnSearchImages', 'click', function () {
-        showImageDownloader(context, this.getAttribute('data-imagetype'));
-    });
-
     addListeners(context, 'btnBrowseAllImages', 'click', function () {
         showImageDownloader(context, this.getAttribute('data-imagetype') || 'Primary');
     });
 
     addListeners(context, 'btnImageCard', 'click', function () {
         showActionSheet(context, this);
+    });
+
+    addListeners(context, 'btnDownloadImage', 'click', function () {
+        const type = this.getAttribute('data-imagetype');
+        let index = this.getAttribute('data-index');
+        index = index === 'null' ? null : parseInt(index, 10);
+        const apiClient = ServerConnections.getApiClient(currentItem.ServerId);
+        downloadImage(apiClient, currentItem.Id, type, index);
     });
 
     addListeners(context, 'btnDeleteImage', 'click', function () {
